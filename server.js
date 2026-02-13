@@ -126,11 +126,12 @@ app.post('/register', async (req, res) => {
     );
 
     res.json(result.rows[0]);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Registration failed' });
+   } catch (err) {
+    console.error('REGISTER ERROR:', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
+
 
 // Login
 app.post('/login', async (req, res) => {
