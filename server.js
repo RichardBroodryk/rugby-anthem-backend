@@ -10,7 +10,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// PostgreSQL connection
+// ================= DATABASE CONNECTION =================
 const pool = new Pool({
   host: process.env.DB_HOST,
   port: process.env.DB_PORT,
@@ -19,12 +19,12 @@ const pool = new Pool({
   database: process.env.DB_NAME,
 });
 
-// Test DB connection
-pool.connect()
-  .then(async (client) => {
+// Initialize database and ensure tables exist
+async function initializeDatabase() {
+  try {
+    const client = await pool.connect();
     console.log('Database connected');
 
-    // Create users table
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
@@ -34,7 +34,6 @@ pool.connect()
       );
     `);
 
-    // Create subscriptions table
     await client.query(`
       CREATE TABLE IF NOT EXISTS subscriptions (
         id SERIAL PRIMARY KEY,
@@ -50,11 +49,14 @@ pool.connect()
 
     console.log('Tables ensured');
     client.release();
-  })
-  .catch(err => console.error('Database connection error:', err));
+  } catch (err) {
+    console.error('Database initialization error:', err);
+  }
+}
 
+initializeDatabase();
 
-// Health check
+// ================= HEALTH CHECK =================
 app.get('/', (req, res) => {
   res.send('Rugby Anthem Zone backend is running');
 });
@@ -103,7 +105,7 @@ async function requirePremium(req, res, next) {
 
 // ================= ROUTES =================
 
-// Register route
+// Register
 app.post('/register', async (req, res) => {
   const { email, password } = req.body;
 
@@ -122,7 +124,7 @@ app.post('/register', async (req, res) => {
   }
 });
 
-// Login route
+// Login
 app.post('/login', async (req, res) => {
   const { email, password } = req.body;
 
@@ -169,9 +171,10 @@ app.post('/api/payments/create-session', async (req, res) => {
 
     const paymentData = {
       merchant_id: process.env.PAYFAST_MERCHANT_ID,
+      merchant_key: process.env.PAYFAST_MERCHANT_KEY,
       return_url: 'http://localhost:3000/payment-success',
       cancel_url: 'http://localhost:3000/payment-cancel',
-      notify_url: 'http://localhost:4000/api/payments/webhook',
+      notify_url: 'https://rugby-anthem-backend-production.up.railway.app/api/payments/webhook',
       amount: amount.toFixed(2),
       item_name: `Rugby Anthem Zone ${plan} subscription`,
       custom_str1: userId,
@@ -196,7 +199,6 @@ app.post('/api/payments/webhook', async (req, res) => {
     const plan = req.body.custom_str2;
 
     if (paymentStatus === 'COMPLETE') {
-      // Try update first
       const update = await pool.query(
         `UPDATE subscriptions
          SET status = 'active', plan = $2, gateway = 'payfast'
@@ -204,7 +206,6 @@ app.post('/api/payments/webhook', async (req, res) => {
         [userId, plan]
       );
 
-      // If no existing row, insert
       if (update.rowCount === 0) {
         await pool.query(
           `INSERT INTO subscriptions (user_id, status, plan, gateway)
@@ -228,6 +229,7 @@ app.get('/premium-content', authenticateToken, requirePremium, (req, res) => {
   res.json({ message: 'Welcome to premium content!' });
 });
 
+// ================= START SERVER =================
 const PORT = process.env.PORT || 4000;
 
 app.listen(PORT, () => {
