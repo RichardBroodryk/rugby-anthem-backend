@@ -59,6 +59,15 @@ initializeDatabase();
 app.get('/', (req, res) => {
   res.send('Rugby Anthem Zone backend is running');
 });
+// DEBUG: check database connection
+app.get('/debug-db', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT current_database()');
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.json({ error: err.message });
+  }
+});
 
 // ================= AUTH MIDDLEWARE =================
 function authenticateToken(req, res, next) {
