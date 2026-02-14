@@ -163,7 +163,7 @@ app.get('/api/test-fixtures', async (req, res) => {
   }
 });
 
-// ================= MATCHES ENDPOINT =================
+// ================= MATCHES ENDPOINT (RAW TEST) =================
 app.get('/api/matches', async (req, res) => {
   try {
     const response = await axios.get(
@@ -173,26 +173,13 @@ app.get('/api/matches', async (req, res) => {
           'x-apisports-key': process.env.API_SPORTS_KEY,
         },
         params: {
-          league: 51,   // Six Nations
-          season: 2026, // Current season
+          league: 51,
+          season: 2026,
         },
       }
     );
 
-    const games = response.data.response || [];
-
-    const matches = games.map((game) => ({
-      id: game.game.id,
-      league: game.league.name,
-      homeTeam: game.teams.home.name,
-      awayTeam: game.teams.away.name,
-      homeScore: game.scores.home,
-      awayScore: game.scores.away,
-      status: game.game.status.long,
-      kickoff: game.game.date,
-    }));
-
-    res.json(matches);
+    res.json(response.data);
   } catch (error) {
     console.error('Match fetch error:', error.message);
 
@@ -201,6 +188,7 @@ app.get('/api/matches', async (req, res) => {
     });
   }
 });
+
 
 // Register
 app.post('/register', async (req, res) => {
