@@ -167,29 +167,28 @@ app.get('/api/test-fixtures', async (req, res) => {
 app.get('/api/matches', async (req, res) => {
   try {
     const response = await axios.get(
-      'https://v1.rugby.api-sports.io/fixtures',
+      'https://v1.rugby.api-sports.io/games',
       {
         headers: {
           'x-apisports-key': process.env.API_SPORTS_KEY,
         },
         params: {
-          league: 22,
-          season: 2026,
+          next: 20,
         },
       }
     );
 
-    const fixtures = response.data.response || [];
+    const games = response.data.response || [];
 
-    const matches = fixtures.map((fixture) => ({
-      id: fixture.fixture.id,
-      league: fixture.league.name,
-      homeTeam: fixture.teams.home.name,
-      awayTeam: fixture.teams.away.name,
-      homeScore: fixture.scores.home,
-      awayScore: fixture.scores.away,
-      status: fixture.fixture.status.long,
-      kickoff: fixture.fixture.date,
+    const matches = games.map((game) => ({
+      id: game.game.id,
+      league: game.league.name,
+      homeTeam: game.teams.home.name,
+      awayTeam: game.teams.away.name,
+      homeScore: game.scores.home,
+      awayScore: game.scores.away,
+      status: game.game.status.long,
+      kickoff: game.game.date,
     }));
 
     res.json(matches);
@@ -201,6 +200,7 @@ app.get('/api/matches', async (req, res) => {
     });
   }
 });
+
 
 // Register
 app.post('/register', async (req, res) => {
