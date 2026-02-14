@@ -141,6 +141,44 @@ app.get('/api/test-rugby', async (req, res) => {
   }
 });
 
+// ================= MATCHES ENDPOINT =================
+app.get('/api/matches', async (req, res) => {
+  try {
+    const response = await axios.get(
+      'https://v1.rugby.api-sports.io/fixtures',
+      {
+        headers: {
+          'x-apisports-key': process.env.API_SPORTS_KEY,
+        },
+        params: {
+          next: 20,
+        },
+      }
+    );
+
+    const fixtures = response.data.response || [];
+
+    const matches = fixtures.map((fixture) => ({
+      id: fixture.fixture.id,
+      league: fixture.league.name,
+      homeTeam: fixture.teams.home.name,
+      awayTeam: fixture.teams.away.name,
+      homeScore: fixture.scores.home,
+      awayScore: fixture.scores.away,
+      status: fixture.fixture.status.long,
+      kickoff: fixture.fixture.date,
+    }));
+
+    res.json(matches);
+  } catch (error) {
+    console.error('Match fetch error:', error.message);
+
+    res.status(500).json({
+      error: 'Failed to fetch match data',
+    });
+  }
+});
+
 // Register
 app.post('/register', async (req, res) => {
   const { email, password } = req.body;
