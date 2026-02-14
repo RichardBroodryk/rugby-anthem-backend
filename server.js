@@ -173,7 +173,8 @@ app.get('/api/matches', async (req, res) => {
           'x-apisports-key': process.env.API_SPORTS_KEY,
         },
         params: {
-          next: 20,
+          league: 51,   // Six Nations
+          season: 2026, // Current season
         },
       }
     );
@@ -200,7 +201,6 @@ app.get('/api/matches', async (req, res) => {
     });
   }
 });
-
 
 // Register
 app.post('/register', async (req, res) => {
