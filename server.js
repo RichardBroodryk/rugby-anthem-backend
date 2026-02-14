@@ -141,6 +141,28 @@ app.get('/api/test-rugby', async (req, res) => {
   }
 });
 
+// ================= RAW FIXTURE TEST =================
+app.get('/api/test-fixtures', async (req, res) => {
+  try {
+    const response = await axios.get(
+      'https://v1.rugby.api-sports.io/fixtures',
+      {
+        headers: {
+          'x-apisports-key': process.env.API_SPORTS_KEY,
+        },
+      }
+    );
+
+    res.json(response.data);
+  } catch (error) {
+    console.error('Fixture test error:', error.message);
+
+    res.status(500).json({
+      error: 'Failed to fetch fixtures',
+    });
+  }
+});
+
 // ================= MATCHES ENDPOINT =================
 app.get('/api/matches', async (req, res) => {
   try {
@@ -151,7 +173,7 @@ app.get('/api/matches', async (req, res) => {
           'x-apisports-key': process.env.API_SPORTS_KEY,
         },
         params: {
-          league: 22,   // Six Nations
+          league: 22,
           season: 2026,
         },
       }
