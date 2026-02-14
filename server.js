@@ -4,6 +4,7 @@ const cors = require('cors');
 const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const axios = require('axios');
 
 const app = express();
 
@@ -59,6 +60,7 @@ initializeDatabase();
 app.get('/', (req, res) => {
   res.send('Rugby Anthem Zone backend is running');
 });
+
 // DEBUG: check database connection
 app.get('/debug-db', async (req, res) => {
   try {
@@ -113,6 +115,32 @@ async function requirePremium(req, res, next) {
 
 // ================= ROUTES =================
 
+// ================= API-SPORTS TEST ROUTE =================
+app.get('/api/test-rugby', async (req, res) => {
+  try {
+    const response = await axios.get(
+      'https://v1.rugby.api-sports.io/leagues',
+      {
+        headers: {
+          'x-apisports-key': process.env.API_SPORTS_KEY,
+        },
+      }
+    );
+
+    res.json({
+      success: true,
+      data: response.data,
+    });
+  } catch (error) {
+    console.error('API-Sports error:', error.message);
+
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch rugby data',
+    });
+  }
+});
+
 // Register
 app.post('/register', async (req, res) => {
   const { email, password } = req.body;
@@ -126,12 +154,11 @@ app.post('/register', async (req, res) => {
     );
 
     res.json(result.rows[0]);
-   } catch (err) {
+  } catch (err) {
     console.error('REGISTER ERROR:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
-
 
 // Login
 app.post('/login', async (req, res) => {
@@ -183,7 +210,8 @@ app.post('/api/payments/create-session', async (req, res) => {
       merchant_key: process.env.PAYFAST_MERCHANT_KEY,
       return_url: 'http://localhost:3000/payment-success',
       cancel_url: 'http://localhost:3000/payment-cancel',
-      notify_url: 'https://rugby-anthem-backend-production.up.railway.app/api/payments/webhook',
+      notify_url:
+        'https://rugby-anthem-backend-production.up.railway.app/api/payments/webhook',
       amount: amount.toFixed(2),
       item_name: `Rugby Anthem Zone ${plan} subscription`,
       custom_str1: userId,
