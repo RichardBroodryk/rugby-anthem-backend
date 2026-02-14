@@ -144,47 +144,22 @@ app.get('/api/test-rugby', async (req, res) => {
 // ================= MATCHES ENDPOINT =================
 app.get('/api/matches', async (req, res) => {
   try {
-    const headers = {
-      'x-apisports-key': process.env.API_SPORTS_KEY,
-    };
-
-    // Get today’s date
-    const today = new Date().toISOString().split('T')[0];
-
-    // 1. Recent results
-    const lastResponse = await axios.get(
+    const response = await axios.get(
       'https://v1.rugby.api-sports.io/fixtures',
       {
-        headers,
-        params: { last: 10 },
+        headers: {
+          'x-apisports-key': process.env.API_SPORTS_KEY,
+        },
+        params: {
+          league: 22,   // Six Nations
+          season: 2026,
+        },
       }
     );
 
-    // 2. Today’s matches
-    const todayResponse = await axios.get(
-      'https://v1.rugby.api-sports.io/fixtures',
-      {
-        headers,
-        params: { date: today },
-      }
-    );
+    const fixtures = response.data.response || [];
 
-    // 3. Upcoming fixtures
-    const nextResponse = await axios.get(
-      'https://v1.rugby.api-sports.io/fixtures',
-      {
-        headers,
-        params: { next: 10 },
-      }
-    );
-
-    const allFixtures = [
-      ...(lastResponse.data.response || []),
-      ...(todayResponse.data.response || []),
-      ...(nextResponse.data.response || []),
-    ];
-
-    const matches = allFixtures.map((fixture) => ({
+    const matches = fixtures.map((fixture) => ({
       id: fixture.fixture.id,
       league: fixture.league.name,
       homeTeam: fixture.teams.home.name,
@@ -204,7 +179,6 @@ app.get('/api/matches', async (req, res) => {
     });
   }
 });
-
 
 // Register
 app.post('/register', async (req, res) => {
