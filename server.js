@@ -173,8 +173,9 @@ app.get('/api/matches', async (req, res) => {
           'x-apisports-key': process.env.API_SPORTS_KEY,
         },
         params: {
-          league: 51,   // Six Nations
-          season: 2024, // Allowed by free plan
+          league: 51,     // Six Nations
+          season: 2024,   // Allowed season
+          status: 'FT',   // Finished matches
         },
       }
     );
@@ -194,14 +195,13 @@ app.get('/api/matches', async (req, res) => {
 
     res.json(matches);
   } catch (error) {
-    console.error('Match fetch error:', error.message);
+    console.error('Match fetch error:', error.response?.data || error.message);
 
     res.status(500).json({
       error: 'Failed to fetch match data',
     });
   }
 });
-
 
 // Register
 app.post('/register', async (req, res) => {
