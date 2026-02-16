@@ -11,15 +11,42 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ================= DATABASE CONNECTION =================
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false,
-  },
-});
+// ================= AUTH MIDDLEWARE =================
+const JWT_SECRET = process.env.JWT_SECRET || "secret";
 
-// Initialize database and ensure tables exist
+function authMiddleware(req, res, next) {
+  const header = req.headers.authorization;
+
+  if (!header) return res.status(401).json({ error: "No token" });
+
+  const token = header.split(" ")[1];
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.userId = decoded.userId;
+    next();
+  } catch {
+    res.status(401).json({ error: "Invalid token" });
+  }
+}
+
+// ================= DATABASE CONNECTION =================
+const isProduction = process.env.NODE_ENV === 'production';
+
+const pool = isProduction
+  ? new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
+    })
+  : new Pool({
+      host: process.env.DB_HOST,
+      port: process.env.DB_PORT,
+      user: process.env.DB_USER,
+      password: process.env.DB_PASSWORD,
+      database: process.env.DB_NAME,
+    });
+
+// ================= DATABASE INIT =================
 async function initializeDatabase() {
   try {
     const client = await pool.connect();
@@ -47,6 +74,22 @@ async function initializeDatabase() {
       );
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS videos (
+        id SERIAL PRIMARY KEY,
+        provider_id TEXT,
+        title TEXT NOT NULL,
+        description TEXT,
+        thumbnail TEXT,
+        url TEXT NOT NULL,
+        provider TEXT,
+        category TEXT,
+        tournament_id TEXT,
+        published_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
     console.log('Tables ensured');
     client.release();
   } catch (err) {
@@ -61,271 +104,174 @@ app.get('/', (req, res) => {
   res.send('Rugby Anthem Zone backend is running');
 });
 
-// DEBUG: check database connection
-app.get('/debug-db', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT current_database()');
-    res.json(result.rows[0]);
-  } catch (err) {
-    res.json({ error: err.message });
-  }
-});
-
-// ================= AUTH MIDDLEWARE =================
-function authenticateToken(req, res, next) {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) return res.sendStatus(401);
-
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) return res.sendStatus(403);
-    req.user = user;
-    next();
-  });
-}
-
-// ================= SUBSCRIPTION MIDDLEWARE =================
-async function requirePremium(req, res, next) {
+// ================= VIDEOS ENDPOINT =================
+app.get('/api/videos', async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT plan FROM subscriptions WHERE user_id = $1 AND status = $2',
-      [req.user.userId, 'active']
+      'SELECT * FROM videos ORDER BY published_at DESC'
     );
-
-    const subscription = result.rows[0];
-
-    if (!subscription) {
-      return res.status(403).json({ error: 'No active subscription' });
-    }
-
-    if (
-      subscription.plan === 'premium' ||
-      subscription.plan === 'super_premium'
-    ) {
-      next();
-    } else {
-      return res.status(403).json({ error: 'Premium access required' });
-    }
+    res.json(result.rows);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Subscription check failed' });
-  }
-}
-
-// ================= ROUTES =================
-
-// ================= API-SPORTS TEST ROUTE =================
-app.get('/api/test-rugby', async (req, res) => {
-  try {
-    const response = await axios.get(
-      'https://v1.rugby.api-sports.io/leagues',
-      {
-        headers: {
-          'x-apisports-key': process.env.API_SPORTS_KEY,
-        },
-      }
-    );
-
-    res.json({
-      success: true,
-      data: response.data,
-    });
-  } catch (error) {
-    console.error('API-Sports error:', error.message);
-
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch rugby data',
-    });
+    console.error('Video fetch error:', err);
+    res.status(500).json({ error: 'Failed to fetch videos' });
   }
 });
 
-// ================= RAW FIXTURE TEST =================
-app.get('/api/test-fixtures', async (req, res) => {
+// ================= YOUTUBE INGESTION (KEYWORD BASED WITH HIT DETECTION) =================
+app.get('/api/videos/ingest', async (req, res) => {
   try {
-    const response = await axios.get(
-      'https://v1.rugby.api-sports.io/fixtures',
-      {
-        headers: {
-          'x-apisports-key': process.env.API_SPORTS_KEY,
-        },
-      }
-    );
+    const apiKey = process.env.YOUTUBE_API_KEY;
 
-    res.json(response.data);
-  } catch (error) {
-    console.error('Fixture test error:', error.message);
+    const searchTerms = [
+      "Six Nations highlights",
+      "World Rugby highlights",
+      "Rugby Sevens highlights",
+      "Rugby union highlights",
+      "Women rugby highlights",
+    ];
 
-    res.status(500).json({
-      error: 'Failed to fetch fixtures',
-    });
-  }
-});
+    let inserted = 0;
 
-// ================= MATCHES ENDPOINT =================
-app.get('/api/matches', async (req, res) => {
-  try {
-    const response = await axios.get(
-      'https://v1.rugby.api-sports.io/games',
-      {
-        headers: {
-          'x-apisports-key': process.env.API_SPORTS_KEY,
-        },
-        params: {
-          league: 51,     // Six Nations
-          season: 2024,   // Allowed season
-          status: 'FT',   // Finished matches
-        },
-      }
-    );
-
-    const games = response.data.response || [];
-
-    const matches = games.map((game) => ({
-      id: game.game.id,
-      league: game.league.name,
-      homeTeam: game.teams.home.name,
-      awayTeam: game.teams.away.name,
-      homeScore: game.scores.home,
-      awayScore: game.scores.away,
-      status: game.game.status.long,
-      kickoff: game.game.date,
-    }));
-
-    res.json(matches);
-  } catch (error) {
-    console.error('Match fetch error:', error.response?.data || error.message);
-
-    res.status(500).json({
-      error: 'Failed to fetch match data',
-    });
-  }
-});
-
-// Register
-app.post('/register', async (req, res) => {
-  const { email, password } = req.body;
-
-  try {
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const result = await pool.query(
-      'INSERT INTO users (email, password) VALUES ($1, $2) RETURNING id, email',
-      [email, hashedPassword]
-    );
-
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error('REGISTER ERROR:', err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Login
-app.post('/login', async (req, res) => {
-  const { email, password } = req.body;
-
-  try {
-    const result = await pool.query(
-      'SELECT * FROM users WHERE email = $1',
-      [email]
-    );
-
-    const user = result.rows[0];
-
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-
-    const validPassword = await bcrypt.compare(password, user.password);
-
-    if (!validPassword) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-
-    const token = jwt.sign(
-      { userId: user.id },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    res.json({ token });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Login failed' });
-  }
-});
-
-// ================= PAYFAST PAYMENT SESSION =================
-app.post('/api/payments/create-session', async (req, res) => {
-  try {
-    const { userId, plan } = req.body;
-
-    let amount;
-    if (plan === 'premium') amount = 4.99;
-    else if (plan === 'super_premium') amount = 9.99;
-    else return res.status(400).json({ error: 'Invalid plan' });
-
-    const paymentData = {
-      merchant_id: process.env.PAYFAST_MERCHANT_ID,
-      merchant_key: process.env.PAYFAST_MERCHANT_KEY,
-      return_url: 'http://localhost:3000/payment-success',
-      cancel_url: 'http://localhost:3000/payment-cancel',
-      notify_url:
-        'https://rugby-anthem-backend-production.up.railway.app/api/payments/webhook',
-      amount: amount.toFixed(2),
-      item_name: `Rugby Anthem Zone ${plan} subscription`,
-      custom_str1: userId,
-      custom_str2: plan,
-    };
-
-    const queryString = new URLSearchParams(paymentData).toString();
-    const paymentUrl = `${process.env.PAYFAST_URL}?${queryString}`;
-
-    res.json({ paymentUrl });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Payment session creation failed' });
-  }
-});
-
-// ================= PAYFAST WEBHOOK =================
-app.post('/api/payments/webhook', async (req, res) => {
-  try {
-    const paymentStatus = req.body.payment_status;
-    const userId = req.body.custom_str1;
-    const plan = req.body.custom_str2;
-
-    if (paymentStatus === 'COMPLETE') {
-      const update = await pool.query(
-        `UPDATE subscriptions
-         SET status = 'active', plan = $2, gateway = 'payfast'
-         WHERE user_id = $1`,
-        [userId, plan]
+    for (const term of searchTerms) {
+      const searchRes = await axios.get(
+        `https://www.googleapis.com/youtube/v3/search`,
+        {
+          params: {
+            part: "snippet",
+            q: term,
+            type: "video",
+            maxResults: 10,
+            order: "date",
+            key: apiKey,
+          },
+        }
       );
 
-      if (update.rowCount === 0) {
-        await pool.query(
-          `INSERT INTO subscriptions (user_id, status, plan, gateway)
-           VALUES ($1, 'active', $2, 'payfast')`,
-          [userId, plan]
-        );
-      }
+      const items = searchRes.data.items;
 
-      console.log(`Subscription activated for user ${userId}`);
+      for (const item of items) {
+        const videoId = item.id.videoId;
+        const title = item.snippet.title;
+        const thumbnail = item.snippet.thumbnails.high.url;
+        const publishedAt = item.snippet.publishedAt;
+
+        // ================= CATEGORY DETECTION =================
+        let category = "highlight";
+
+        const lowerTitle = title.toLowerCase();
+
+        if (
+          lowerTitle.includes("hit") ||
+          lowerTitle.includes("tackle") ||
+          lowerTitle.includes("collision") ||
+          lowerTitle.includes("smash")
+        ) {
+          category = "hit";
+        }
+
+        // ================= DUPLICATE CHECK =================
+        const exists = await pool.query(
+          'SELECT id FROM videos WHERE provider_id = $1',
+          [videoId]
+        );
+
+        if (exists.rows.length === 0) {
+          await pool.query(
+            `INSERT INTO videos
+            (provider_id, title, thumbnail, url, provider, category, published_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [
+              videoId,
+              title,
+              thumbnail,
+              `https://www.youtube.com/watch?v=${videoId}`,
+              'YouTube',
+              category,
+              publishedAt,
+            ]
+          );
+
+          inserted++;
+        }
+      }
     }
 
-    res.sendStatus(200);
+    res.json({
+      message: 'Keyword ingestion complete',
+      inserted,
+    });
   } catch (err) {
-    console.error('Webhook error:', err);
-    res.sendStatus(500);
+    console.error('YouTube ingestion error:', err.message);
+    res.status(500).json({ error: 'Ingestion failed' });
   }
 });
 
-// Premium-protected route
-app.get('/premium-content', authenticateToken, requirePremium, (req, res) => {
-  res.json({ message: 'Welcome to premium content!' });
+// ================= COMMENTS =================
+
+/**
+ * POST /api/comments
+ */
+app.post('/api/comments', authMiddleware, async (req, res) => {
+  const { match_id, video_id, content } = req.body;
+
+  if (!content) {
+    return res.status(400).json({ error: 'Content required' });
+  }
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO comments (user_id, match_id, video_id, content)
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
+      [req.userId, match_id || null, video_id || null, content]
+    );
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Comment insert error:', err);
+    res.status(500).json({ error: 'Failed to post comment' });
+  }
+});
+
+/**
+ * GET /api/comments?match_id=123
+ * GET /api/comments?video_id=5
+ */
+app.get('/api/comments', async (req, res) => {
+  const { match_id, video_id } = req.query;
+
+  try {
+    let result;
+
+    if (match_id) {
+      result = await pool.query(
+        `SELECT c.*, u.email
+         FROM comments c
+         JOIN users u ON c.user_id = u.id
+         WHERE match_id = $1
+         ORDER BY created_at DESC`,
+        [match_id]
+      );
+    } else if (video_id) {
+      result = await pool.query(
+        `SELECT c.*, u.email
+         FROM comments c
+         JOIN users u ON c.user_id = u.id
+         WHERE video_id = $1
+         ORDER BY created_at DESC`,
+        [video_id]
+      );
+    } else {
+      return res
+        .status(400)
+        .json({ error: 'match_id or video_id required' });
+    }
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Comment fetch error:', err);
+    res.status(500).json({ error: 'Failed to fetch comments' });
+  }
 });
 
 // ================= START SERVER =================
