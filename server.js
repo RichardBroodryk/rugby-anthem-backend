@@ -256,7 +256,13 @@ app.get('/api/videos/ingest', async (req, res) => {
 
 // ================= COMMENTS =================
 app.post('/api/comments', authMiddleware, async (req, res) => {
-  const { match_id, video_id, content } = req.body;
+  const {
+    tournament_id,
+    match_id,
+    video_id,
+    match_phase,
+    content,
+  } = req.body;
 
   if (!content) {
     return res.status(400).json({ error: 'Content required' });
@@ -264,10 +270,18 @@ app.post('/api/comments', authMiddleware, async (req, res) => {
 
   try {
     const result = await pool.query(
-      `INSERT INTO comments (user_id, match_id, video_id, content)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO comments
+       (user_id, tournament_id, match_id, video_id, content, match_phase)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [req.userId, match_id || null, video_id || null, content]
+      [
+        req.userId,
+        tournament_id || null,
+        match_id || null,
+        video_id || null,
+        content,
+        match_phase || null,
+      ]
     );
 
     res.json(result.rows[0]);
@@ -278,12 +292,21 @@ app.post('/api/comments', authMiddleware, async (req, res) => {
 });
 
 app.get('/api/comments', async (req, res) => {
-  const { match_id, video_id } = req.query;
+  const { tournament_id, match_id, video_id } = req.query;
 
   try {
     let result;
 
-    if (match_id) {
+    if (tournament_id) {
+      result = await pool.query(
+        `SELECT c.*, u.email
+         FROM comments c
+         JOIN users u ON c.user_id = u.id
+         WHERE tournament_id = $1
+         ORDER BY created_at DESC`,
+        [tournament_id]
+      );
+    } else if (match_id) {
       result = await pool.query(
         `SELECT c.*, u.email
          FROM comments c
@@ -302,9 +325,9 @@ app.get('/api/comments', async (req, res) => {
         [video_id]
       );
     } else {
-      return res
-        .status(400)
-        .json({ error: 'match_id or video_id required' });
+      return res.status(400).json({
+        error: 'tournament_id, match_id or video_id required',
+      });
     }
 
     res.json(result.rows);
@@ -313,6 +336,7 @@ app.get('/api/comments', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch comments' });
   }
 });
+
 
 // ================= START SERVER =================
 const PORT = process.env.PORT || 4000;
