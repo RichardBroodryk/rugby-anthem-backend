@@ -11,22 +11,23 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ================= AUTH MIDDLEWARE =================
-const JWT_SECRET = process.env.JWT_SECRET || "secret";
+// ================= JWT SECRET =================
+const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret';
 
+// ================= AUTH MIDDLEWARE =================
 function authMiddleware(req, res, next) {
   const header = req.headers.authorization;
 
-  if (!header) return res.status(401).json({ error: "No token" });
+  if (!header) return res.status(401).json({ error: 'No token' });
 
-  const token = header.split(" ")[1];
+  const token = header.split(' ')[1];
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     req.userId = decoded.userId;
     next();
   } catch {
-    res.status(401).json({ error: "Invalid token" });
+    res.status(401).json({ error: 'Invalid token' });
   }
 }
 
@@ -99,6 +100,56 @@ async function initializeDatabase() {
 
 initializeDatabase();
 
+// ================= AUTH ROUTES =================
+app.post('/api/register', async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    const hashed = await bcrypt.hash(password, 10);
+
+    const result = await pool.query(
+      'INSERT INTO users (email, password) VALUES ($1, $2) RETURNING id',
+      [email, hashed]
+    );
+
+    res.json({ userId: result.rows[0].id });
+  } catch (err) {
+    console.error('Register error:', err);
+    res.status(400).json({ error: 'User already exists' });
+  }
+});
+
+app.post('/api/login', async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    const result = await pool.query(
+      'SELECT * FROM users WHERE email = $1',
+      [email]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const user = result.rows[0];
+    const valid = await bcrypt.compare(password, user.password);
+
+    if (!valid) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const token = jwt.sign({ userId: user.id }, JWT_SECRET, {
+      expiresIn: '7d',
+    });
+
+    res.json({ token });
+  } catch (err) {
+    console.error('Login error:', err);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
 // ================= HEALTH CHECK =================
 app.get('/', (req, res) => {
   res.send('Rugby Anthem Zone backend is running');
@@ -117,17 +168,17 @@ app.get('/api/videos', async (req, res) => {
   }
 });
 
-// ================= YOUTUBE INGESTION (KEYWORD BASED WITH HIT DETECTION) =================
+// ================= YOUTUBE INGESTION =================
 app.get('/api/videos/ingest', async (req, res) => {
   try {
     const apiKey = process.env.YOUTUBE_API_KEY;
 
     const searchTerms = [
-      "Six Nations highlights",
-      "World Rugby highlights",
-      "Rugby Sevens highlights",
-      "Rugby union highlights",
-      "Women rugby highlights",
+      'Six Nations highlights',
+      'World Rugby highlights',
+      'Rugby Sevens highlights',
+      'Rugby union highlights',
+      'Women rugby highlights',
     ];
 
     let inserted = 0;
@@ -137,11 +188,11 @@ app.get('/api/videos/ingest', async (req, res) => {
         `https://www.googleapis.com/youtube/v3/search`,
         {
           params: {
-            part: "snippet",
+            part: 'snippet',
             q: term,
-            type: "video",
+            type: 'video',
             maxResults: 10,
-            order: "date",
+            order: 'date',
             key: apiKey,
           },
         }
@@ -155,21 +206,18 @@ app.get('/api/videos/ingest', async (req, res) => {
         const thumbnail = item.snippet.thumbnails.high.url;
         const publishedAt = item.snippet.publishedAt;
 
-        // ================= CATEGORY DETECTION =================
-        let category = "highlight";
-
+        let category = 'highlight';
         const lowerTitle = title.toLowerCase();
 
         if (
-          lowerTitle.includes("hit") ||
-          lowerTitle.includes("tackle") ||
-          lowerTitle.includes("collision") ||
-          lowerTitle.includes("smash")
+          lowerTitle.includes('hit') ||
+          lowerTitle.includes('tackle') ||
+          lowerTitle.includes('collision') ||
+          lowerTitle.includes('smash')
         ) {
-          category = "hit";
+          category = 'hit';
         }
 
-        // ================= DUPLICATE CHECK =================
         const exists = await pool.query(
           'SELECT id FROM videos WHERE provider_id = $1',
           [videoId]
@@ -207,10 +255,6 @@ app.get('/api/videos/ingest', async (req, res) => {
 });
 
 // ================= COMMENTS =================
-
-/**
- * POST /api/comments
- */
 app.post('/api/comments', authMiddleware, async (req, res) => {
   const { match_id, video_id, content } = req.body;
 
@@ -233,10 +277,6 @@ app.post('/api/comments', authMiddleware, async (req, res) => {
   }
 });
 
-/**
- * GET /api/comments?match_id=123
- * GET /api/comments?video_id=5
- */
 app.get('/api/comments', async (req, res) => {
   const { match_id, video_id } = req.query;
 
