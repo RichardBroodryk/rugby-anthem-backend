@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { Pool } = require('pg');
+const pool = require('./db'); // ✅ unified DB connection
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
@@ -31,74 +31,10 @@ function authMiddleware(req, res, next) {
   }
 }
 
-// ================= DATABASE CONNECTION =================
-const isProduction = process.env.NODE_ENV === 'production';
-
-const pool = isProduction
-  ? new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
-    })
-  : new Pool({
-      host: process.env.DB_HOST,
-      port: process.env.DB_PORT,
-      user: process.env.DB_USER,
-      password: process.env.DB_PASSWORD,
-      database: process.env.DB_NAME,
-    });
-
-// ================= DATABASE INIT =================
-async function initializeDatabase() {
-  try {
-    const client = await pool.connect();
-    console.log('Database connected');
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        email TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS subscriptions (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id),
-        status TEXT NOT NULL,
-        plan TEXT NOT NULL,
-        gateway TEXT,
-        external_subscription_id TEXT,
-        next_billing_date TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS videos (
-        id SERIAL PRIMARY KEY,
-        provider_id TEXT,
-        title TEXT NOT NULL,
-        description TEXT,
-        thumbnail TEXT,
-        url TEXT NOT NULL,
-        provider TEXT,
-        category TEXT,
-        tournament_id TEXT,
-        published_at TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    console.log('Tables ensured');
-    client.release();
-  } catch (err) {
-    console.error('Database initialization error:', err);
-  }
-}
-
-initializeDatabase();
+// ================= HEALTH CHECK =================
+app.get('/', (req, res) => {
+  res.send('Rugby Anthem Zone backend is running');
+});
 
 // ================= AUTH ROUTES =================
 app.post('/api/register', async (req, res) => {
@@ -108,7 +44,7 @@ app.post('/api/register', async (req, res) => {
     const hashed = await bcrypt.hash(password, 10);
 
     const result = await pool.query(
-      'INSERT INTO users (email, password) VALUES ($1, $2) RETURNING id',
+      'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id',
       [email, hashed]
     );
 
@@ -133,7 +69,7 @@ app.post('/api/login', async (req, res) => {
     }
 
     const user = result.rows[0];
-    const valid = await bcrypt.compare(password, user.password);
+    const valid = await bcrypt.compare(password, user.password_hash);
 
     if (!valid) {
       return res.status(401).json({ error: 'Invalid credentials' });
@@ -148,11 +84,6 @@ app.post('/api/login', async (req, res) => {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Login failed' });
   }
-});
-
-// ================= HEALTH CHECK =================
-app.get('/', (req, res) => {
-  res.send('Rugby Anthem Zone backend is running');
 });
 
 // ================= VIDEOS ENDPOINT =================
@@ -336,7 +267,6 @@ app.get('/api/comments', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch comments' });
   }
 });
-
 
 // ================= START SERVER =================
 const PORT = process.env.PORT || 4000;
