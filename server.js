@@ -322,6 +322,27 @@ app.get('/api/debug/jwt-secret', (req, res) => {
   });
 });
 
+
+// ================= HARD JWT DEBUG =================
+app.get('/api/debug/jwt-roundtrip', async (req, res) => {
+  try {
+    const testToken = jwt.sign({ test: true }, JWT_SECRET);
+    const decoded = jwt.verify(testToken, JWT_SECRET);
+
+    res.json({
+      signWorks: true,
+      verifyWorks: true,
+      secretLength: JWT_SECRET.length,
+      decoded,
+    });
+  } catch (err) {
+    res.status(500).json({
+      signWorks: false,
+      verifyWorks: false,
+      error: err.message,
+    });
+  }
+});
 // ================= START SERVER =================
 const PORT = process.env.PORT || 4000;
 
