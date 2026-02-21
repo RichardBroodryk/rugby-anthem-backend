@@ -27,6 +27,11 @@ if (process.env.DATABASE_URL) {
   console.log("💻 Using local database");
 }
 
+// ✅ CRITICAL: Force PostgreSQL to use public schema
+pool.on("connect", (client) => {
+  client.query("SET search_path TO public");
+});
+
 // Test connection
 const testConnection = async () => {
   try {
