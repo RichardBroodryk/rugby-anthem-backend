@@ -17,23 +17,36 @@ app.use(express.json());
 // ================= JWT SECRET =================
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret';
 
-// ================= AUTH MIDDLEWARE =================
+// ================= AUTH MIDDLEWARE (HARDENED) =================
 function authMiddleware(req, res, next) {
-  const header = req.headers.authorization;
-
-  if (!header) return res.status(401).json({ error: 'No token' });
-
-  const token = header.split(' ')[1];
-
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const authHeader =
+      req.headers.authorization ||
+      req.headers.Authorization ||
+      '';
+
+    if (!authHeader) {
+      return res.status(401).json({ error: 'No token' });
+    }
+
+    // Support both "Bearer xxx" and raw token (defensive)
+    let token = authHeader.startsWith('Bearer ')
+      ? authHeader.slice(7)
+      : authHeader;
+
+    if (!token) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    const decoded = jwt.verify(token.trim(), JWT_SECRET);
+
     req.userId = decoded.userId;
     next();
-  } catch {
-    res.status(401).json({ error: 'Invalid token' });
+  } catch (err) {
+    console.error('Auth verify error:', err.message);
+    return res.status(401).json({ error: 'Invalid token' });
   }
 }
-
 // ✅ ROUTE MOUNTS (after middleware definition)
 app.use('/api/payments/paddle', paddleWebhook);
 app.use('/api/subscription', authMiddleware, subscriptionStatus);
