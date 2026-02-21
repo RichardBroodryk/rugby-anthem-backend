@@ -7,6 +7,7 @@ const jwt = require('jsonwebtoken');
 const axios = require('axios');
 const paddleWebhook = require('./routes/paddleWebhook');
 const subscriptionStatus = require('./routes/subscriptionStatus');
+const createCheckout = require('./routes/createCheckout');
 
 const app = express();
 
@@ -36,6 +37,7 @@ function authMiddleware(req, res, next) {
 // ✅ ROUTE MOUNTS (after middleware definition)
 app.use('/api/payments/paddle', paddleWebhook);
 app.use('/api/subscription', authMiddleware, subscriptionStatus);
+app.use('/api/payments', authMiddleware, createCheckout);
 
 // ================= HEALTH CHECK =================
 app.get('/', (req, res) => {
