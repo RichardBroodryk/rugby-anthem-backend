@@ -292,7 +292,14 @@ app.get('/api/comments', async (req, res) => {
 // ================= START SERVER =================
 const PORT = process.env.PORT || 4000;
 
-
+// ================= AUTH DEBUG =================
+app.get('/api/debug/auth-check', authMiddleware, (req, res) => {
+  res.json({
+    ok: true,
+    userId: req.userId,
+    authHeader: req.headers.authorization || null,
+  });
+});
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
