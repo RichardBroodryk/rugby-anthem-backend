@@ -25,6 +25,7 @@ if (!JWT_SECRET) {
 function authMiddleware(req, res, next) {
   try {
     let header = req.headers.authorization;
+    console.log('RAW AUTH HEADER →', req.headers.authorization);
 
     // normalize header safely
     if (Array.isArray(header)) {
