@@ -290,6 +290,27 @@ app.get('/api/comments', async (req, res) => {
 // ================= START SERVER =================
 const PORT = process.env.PORT || 4000;
 
+app.get('/api/debug/db-identity', async (req, res) => {
+  try {
+    const db = await pool.query('SELECT current_database()');
+    const schema = await pool.query('SELECT current_schema()');
+    const cols = await pool.query(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_name = 'users'
+      ORDER BY column_name
+    `);
+
+    res.json({
+      database: db.rows[0].current_database,
+      schema: schema.rows[0].current_schema,
+      user_columns: cols.rows,
+    });
+  } catch (err) {
+    res.json({ error: err.message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
