@@ -300,6 +300,17 @@ app.get('/api/debug/auth-check', authMiddleware, (req, res) => {
     authHeader: req.headers.authorization || null,
   });
 });
+
+// ================= JWT DEBUG =================
+app.get('/api/debug/jwt-secret', (req, res) => {
+  const secret = process.env.JWT_SECRET || 'dev_secret';
+
+  res.json({
+    hasEnv: !!process.env.JWT_SECRET,
+    length: secret.length,
+    startsWith: secret.substring(0, 5),
+  });
+});
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
