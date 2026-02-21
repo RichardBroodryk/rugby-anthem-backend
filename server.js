@@ -312,6 +312,19 @@ app.get('/api/debug/fix-users-schema', async (req, res) => {
     res.json({ error: err.message });
   }
 });
+app.get('/api/debug/fix-password-constraint', async (req, res) => {
+  try {
+    await pool.query(`
+      ALTER TABLE users
+      ALTER COLUMN password DROP NOT NULL;
+    `);
+
+    res.json({ message: 'password column constraint relaxed' });
+  } catch (err) {
+    res.json({ error: err.message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
