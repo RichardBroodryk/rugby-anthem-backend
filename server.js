@@ -17,33 +17,36 @@ app.use(express.json());
 // ================= JWT SECRET =================
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret';
 
-// ================= AUTH MIDDLEWARE (HARDENED) =================
+// ================= AUTH MIDDLEWARE (FINAL HARDENED) =================
 function authMiddleware(req, res, next) {
   try {
     const authHeader =
-      req.headers.authorization ||
-      req.headers.Authorization ||
-      '';
+      req.headers['authorization'] ||
+      req.headers['Authorization'];
+
+    // 🔍 DEBUG (temporary but safe)
+    console.log('AUTH HEADER RAW:', authHeader);
 
     if (!authHeader) {
       return res.status(401).json({ error: 'No token' });
     }
 
-    // Support both "Bearer xxx" and raw token (defensive)
-    let token = authHeader.startsWith('Bearer ')
-      ? authHeader.slice(7)
-      : authHeader;
-
-    if (!token) {
-      return res.status(401).json({ error: 'Invalid token' });
+    if (!authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Invalid token format' });
     }
 
-    const decoded = jwt.verify(token.trim(), JWT_SECRET);
+    const token = authHeader.substring(7).trim();
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    // 🔍 DEBUG
+    console.log('JWT DECODED:', decoded);
 
     req.userId = decoded.userId;
+
     next();
   } catch (err) {
-    console.error('Auth verify error:', err.message);
+    console.error('Auth verify error FULL:', err);
     return res.status(401).json({ error: 'Invalid token' });
   }
 }
