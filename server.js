@@ -21,11 +21,12 @@ if (!JWT_SECRET) {
   throw new Error('JWT_SECRET missing from environment');
 }
 
+// ================= AUTH MIDDLEWARE (HARDENED) =================
 function authMiddleware(req, res, next) {
   try {
     let header = req.headers.authorization;
 
-    // 🔥 HARDEN: normalize header safely
+    // normalize header safely
     if (Array.isArray(header)) {
       header = header[0];
     }
@@ -53,13 +54,13 @@ function authMiddleware(req, res, next) {
     }
 
     req.userId = decoded.userId;
-
     next();
   } catch (err) {
     console.error('AUTH FAIL:', err.message);
     return res.status(401).json({ error: 'Invalid token' });
   }
 }
+
 // ================= ROUTE MOUNTS =================
 app.use('/api/payments/paddle', paddleWebhook);
 app.use('/api/subscription', authMiddleware, subscriptionStatus);
@@ -333,8 +334,6 @@ app.get('/api/debug/jwt-secret', (req, res) => {
   });
 });
 
-
-// ================= HARD JWT DEBUG =================
 app.get('/api/debug/jwt-roundtrip', async (req, res) => {
   try {
     const testToken = jwt.sign({ test: true }, JWT_SECRET);
@@ -355,20 +354,12 @@ app.get('/api/debug/jwt-roundtrip', async (req, res) => {
   }
 });
 
-// ================= TOKEN ECHO DEBUG =================
 app.get('/api/debug/decode-token', authMiddleware, (req, res) => {
   res.json({
     userIdFromMiddleware: req.userId,
   });
 });
-// ================= START SERVER =================
-const PORT = process.env.PORT || 4000;
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
-
-// ================= RAW DECODE (NO VERIFY) =================
 app.post('/api/debug/raw-decode', (req, res) => {
   try {
     const { token } = req.body;
@@ -377,4 +368,11 @@ app.post('/api/debug/raw-decode', (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ================= START SERVER =================
+const PORT = process.env.PORT || 4000;
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
