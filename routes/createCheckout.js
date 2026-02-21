@@ -76,11 +76,12 @@ router.post('/create-checkout', async (req, res) => {
 
         // ✅ REQUIRED FOR BILLING V2 HOSTED CHECKOUT
         checkout: {
-          success_url: `${FRONTEND_URL}/success`,
-          cancel_url: `${FRONTEND_URL}/cancel`,
-        },
-      },
-      {
+  success_url: `${FRONTEND_URL}/success`,
+  cancel_url: `${FRONTEND_URL}/cancel`,
+  settings: {
+    display_mode: 'hosted',
+  },
+},
         headers: {
           Authorization: `Bearer ${PADDLE_API_KEY}`,
           'Content-Type': 'application/json',
