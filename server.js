@@ -343,9 +343,27 @@ app.get('/api/debug/jwt-roundtrip', async (req, res) => {
     });
   }
 });
+
+// ================= TOKEN ECHO DEBUG =================
+app.get('/api/debug/decode-token', authMiddleware, (req, res) => {
+  res.json({
+    userIdFromMiddleware: req.userId,
+  });
+});
 // ================= START SERVER =================
 const PORT = process.env.PORT || 4000;
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+});
+
+// ================= RAW DECODE (NO VERIFY) =================
+app.post('/api/debug/raw-decode', (req, res) => {
+  try {
+    const { token } = req.body;
+    const decoded = jwt.decode(token);
+    res.json({ decoded });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
