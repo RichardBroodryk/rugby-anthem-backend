@@ -15,42 +15,41 @@ app.use(cors());
 app.use(express.json());
 
 // ================= JWT SECRET =================
-const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret';
+const JWT_SECRET = process.env.JWT_SECRET;
 
-// ================= AUTH MIDDLEWARE (FINAL HARDENED) =================
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET missing from environment');
+}
+
+// ================= AUTH MIDDLEWARE =================
 function authMiddleware(req, res, next) {
   try {
-    const authHeader =
-      req.headers['authorization'] ||
-      req.headers['Authorization'];
+    const header = req.headers.authorization;
 
-    // 🔍 DEBUG (temporary but safe)
-    console.log('AUTH HEADER RAW:', authHeader);
-
-    if (!authHeader) {
+    if (!header) {
       return res.status(401).json({ error: 'No token' });
     }
 
-    if (!authHeader.startsWith('Bearer ')) {
+    const parts = header.split(' ');
+
+    if (parts.length !== 2 || parts[0] !== 'Bearer') {
       return res.status(401).json({ error: 'Invalid token format' });
     }
 
-    const token = authHeader.substring(7).trim();
+    const token = parts[1];
 
     const decoded = jwt.verify(token, JWT_SECRET);
-
-    // 🔍 DEBUG
-    console.log('JWT DECODED:', decoded);
 
     req.userId = decoded.userId;
 
     next();
   } catch (err) {
-    console.error('Auth verify error FULL:', err);
+    console.error('AUTH FAIL:', err.message);
     return res.status(401).json({ error: 'Invalid token' });
   }
 }
-// ✅ ROUTE MOUNTS (after middleware definition)
+
+// ================= ROUTE MOUNTS =================
 app.use('/api/payments/paddle', paddleWebhook);
 app.use('/api/subscription', authMiddleware, subscriptionStatus);
 app.use('/api/payments', authMiddleware, createCheckout);
@@ -80,7 +79,6 @@ app.post('/api/register', async (req, res) => {
   } catch (err) {
     console.error('Register error FULL:', err);
 
-    // duplicate email
     if (err.code === '23505') {
       return res.status(400).json({ error: 'User already exists' });
     }
@@ -305,10 +303,7 @@ app.get('/api/comments', async (req, res) => {
   }
 });
 
-// ================= START SERVER =================
-const PORT = process.env.PORT || 4000;
-
-// ================= AUTH DEBUG =================
+// ================= DEBUG ROUTES =================
 app.get('/api/debug/auth-check', authMiddleware, (req, res) => {
   res.json({
     ok: true,
@@ -317,16 +312,19 @@ app.get('/api/debug/auth-check', authMiddleware, (req, res) => {
   });
 });
 
-// ================= JWT DEBUG =================
 app.get('/api/debug/jwt-secret', (req, res) => {
-  const secret = process.env.JWT_SECRET || 'dev_secret';
+  const secret = process.env.JWT_SECRET;
 
   res.json({
     hasEnv: !!process.env.JWT_SECRET,
-    length: secret.length,
-    startsWith: secret.substring(0, 5),
+    length: secret ? secret.length : 0,
+    startsWith: secret ? secret.substring(0, 5) : null,
   });
 });
+
+// ================= START SERVER =================
+const PORT = process.env.PORT || 4000;
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
