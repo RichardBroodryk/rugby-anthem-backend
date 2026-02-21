@@ -1,12 +1,16 @@
 // =====================================================
 // Paddle Webhook Handler — Rugby Anthem Zone
+// PRODUCTION SUBSCRIPTION LOGIC
 // =====================================================
 
 const express = require("express");
 const router = express.Router();
 const pool = require("../db");
 
-// Paddle sends JSON
+// =====================================================
+// MAIN WEBHOOK
+// =====================================================
+
 router.post("/webhook", async (req, res) => {
   try {
     const event = req.body;
@@ -18,9 +22,7 @@ router.post("/webhook", async (req, res) => {
       return res.status(400).json({ error: "Invalid Paddle payload" });
     }
 
-    // =====================================================
-    // IDEMPOTENCY CHECK
-    // =====================================================
+    // ================= IDEMPOTENCY =================
     const existing = await pool.query(
       `SELECT id FROM webhook_events WHERE paddle_event_id = $1`,
       [eventId]
@@ -31,7 +33,7 @@ router.post("/webhook", async (req, res) => {
       return res.json({ received: true });
     }
 
-    // Record webhook receipt
+    // record webhook receipt
     await pool.query(
       `INSERT INTO webhook_events (paddle_event_id, event_type, processed)
        VALUES ($1, $2, false)`,
@@ -40,9 +42,7 @@ router.post("/webhook", async (req, res) => {
 
     console.log("📩 Paddle event:", eventType);
 
-    // =====================================================
-    // EVENT ROUTING
-    // =====================================================
+    // ================= ROUTING =================
     switch (eventType) {
       case "subscription.created":
       case "subscription_created":
@@ -73,7 +73,7 @@ router.post("/webhook", async (req, res) => {
         console.log("ℹ️ Unhandled Paddle event:", eventType);
     }
 
-    // Mark processed
+    // mark processed
     await pool.query(
       `UPDATE webhook_events
        SET processed = true, processed_at = NOW()
@@ -93,23 +93,147 @@ router.post("/webhook", async (req, res) => {
 // =====================================================
 
 async function handleSubscriptionCreated(event) {
-  console.log("✅ subscription created");
+  try {
+    const sub = event.data || event;
+
+    const paddleSubId = sub.id || sub.subscription_id;
+    const customerId = sub.customer_id;
+    const priceId = sub.items?.[0]?.price?.id || sub.price_id;
+    const status = sub.status || "active";
+
+    // find tier from price
+    const tierRes = await pool.query(
+      `SELECT tier_code FROM tiers WHERE paddle_price_id = $1`,
+      [priceId]
+    );
+
+    const tierCode = tierRes.rows[0]?.tier_code || "premium";
+
+    // find user by paddle customer id
+    const userRes = await pool.query(
+      `SELECT id FROM users WHERE paddle_customer_id = $1`,
+      [customerId]
+    );
+
+    if (userRes.rows.length === 0) {
+      console.log("⚠️ User not found for Paddle customer:", customerId);
+      return;
+    }
+
+    const userId = userRes.rows[0].id;
+
+    // upsert subscription
+    await pool.query(
+      `INSERT INTO subscriptions
+       (user_id, paddle_subscription_id, paddle_customer_id, tier_code, status)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (paddle_subscription_id)
+       DO UPDATE SET status = EXCLUDED.status, tier_code = EXCLUDED.tier_code`,
+      [userId, paddleSubId, customerId, tierCode, status]
+    );
+
+    await updateUserAccess(userId, tierCode);
+
+    console.log("✅ subscription created/updated for user:", userId);
+  } catch (err) {
+    console.error("subscription.created handler error:", err);
+  }
 }
 
 async function handleTransactionPaid(event) {
-  console.log("💰 transaction paid");
+  try {
+    const tx = event.data || event;
+
+    const subId = tx.subscription_id;
+    const amount = tx.amount || 0;
+    const currency = tx.currency || "USD";
+    const eventId = tx.id || tx.transaction_id;
+
+    await pool.query(
+      `INSERT INTO payment_events
+       (paddle_event_id, paddle_subscription_id, amount, currency, event_type)
+       VALUES ($1, $2, $3, $4, 'transaction_paid')
+       ON CONFLICT DO NOTHING`,
+      [eventId, subId, amount, currency]
+    );
+
+    console.log("💰 payment recorded:", subId);
+  } catch (err) {
+    console.error("transaction.paid handler error:", err);
+  }
 }
 
 async function handleSubscriptionUpdated(event) {
-  console.log("🔄 subscription updated");
+  try {
+    const sub = event.data || event;
+    const paddleSubId = sub.id || sub.subscription_id;
+    const status = sub.status;
+
+    await pool.query(
+      `UPDATE subscriptions
+       SET status = $1, updated_at = NOW()
+       WHERE paddle_subscription_id = $2`,
+      [status, paddleSubId]
+    );
+
+    console.log("🔄 subscription updated:", paddleSubId);
+  } catch (err) {
+    console.error("subscription.updated handler error:", err);
+  }
 }
 
 async function handleSubscriptionCancelled(event) {
-  console.log("❌ subscription cancelled");
+  try {
+    const sub = event.data || event;
+    const paddleSubId = sub.id || sub.subscription_id;
+
+    const result = await pool.query(
+      `UPDATE subscriptions
+       SET status = 'cancelled', cancelled_at = NOW()
+       WHERE paddle_subscription_id = $1
+       RETURNING user_id`,
+      [paddleSubId]
+    );
+
+    if (result.rows.length > 0) {
+      await updateUserAccess(result.rows[0].user_id, "free");
+    }
+
+    console.log("❌ subscription cancelled:", paddleSubId);
+  } catch (err) {
+    console.error("subscription.cancelled handler error:", err);
+  }
 }
 
 async function handleTransactionRefunded(event) {
   console.log("↩️ transaction refunded");
+}
+
+// =====================================================
+// USER ACCESS HELPER
+// =====================================================
+
+async function updateUserAccess(userId, tierCode) {
+  const hasPremium = tierCode === "premium" || tierCode === "super";
+  const hasSuper = tierCode === "super";
+
+  await pool.query(
+    `INSERT INTO user_access_cache
+     (user_id, tier_code, has_premium, has_super, updated_at)
+     VALUES ($1, $2, $3, $4, NOW())
+     ON CONFLICT (user_id)
+     DO UPDATE SET
+       tier_code = EXCLUDED.tier_code,
+       has_premium = EXCLUDED.has_premium,
+       has_super = EXCLUDED.has_super,
+       updated_at = NOW()`,
+    [userId, tierCode, hasPremium, hasSuper]
+  );
+
+  await pool.query(
+    `UPDATE users SET tier = $1, updated_at = NOW() WHERE id = $2`,
+    [tierCode, userId]
+  );
 }
 
 module.exports = router;
