@@ -73,6 +73,12 @@ router.post('/create-checkout', async (req, res) => {
           user_id: userId,
           tier,
         },
+
+        // ✅ REQUIRED FOR BILLING V2 HOSTED CHECKOUT
+        checkout: {
+          success_url: `${FRONTEND_URL}/success`,
+          cancel_url: `${FRONTEND_URL}/cancel`,
+        },
       },
       {
         headers: {
