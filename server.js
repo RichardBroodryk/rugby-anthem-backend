@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const pool = require('./db'); // ✅ unified DB connection
+const pool = require('./db');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
@@ -14,7 +14,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ================= JWT SECRET =================
+// ================= JWT SECRET (TRIMMED) =================
 const JWT_SECRET = (process.env.JWT_SECRET || '').trim();
 
 if (!JWT_SECRET) {
@@ -24,10 +24,10 @@ if (!JWT_SECRET) {
 // ================= AUTH MIDDLEWARE (HARDENED) =================
 function authMiddleware(req, res, next) {
   try {
-    let header = req.headers.authorization;
-    console.log('RAW AUTH HEADER →', req.headers.authorization);
+    console.log('MIDDLEWARE SECRET LEN →', JWT_SECRET.length);
 
-    // normalize header safely
+    let header = req.headers.authorization;
+
     if (Array.isArray(header)) {
       header = header[0];
     }
@@ -123,6 +123,8 @@ app.post('/api/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
+    console.log('LOGIN SECRET LEN →', JWT_SECRET.length);
+
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, {
       expiresIn: '7d',
     });
@@ -164,7 +166,7 @@ app.get('/api/videos/ingest', async (req, res) => {
 
     for (const term of searchTerms) {
       const searchRes = await axios.get(
-        `https://www.googleapis.com/youtube/v3/search`,
+        'https://www.googleapis.com/youtube/v3/search',
         {
           params: {
             part: 'snippet',
@@ -326,12 +328,12 @@ app.get('/api/debug/auth-check', authMiddleware, (req, res) => {
 });
 
 app.get('/api/debug/jwt-secret', (req, res) => {
-  const secret = process.env.JWT_SECRET;
+  const secret = (process.env.JWT_SECRET || '').trim();
 
   res.json({
     hasEnv: !!process.env.JWT_SECRET,
-    length: secret ? secret.length : 0,
-    startsWith: secret ? secret.substring(0, 5) : null,
+    length: secret.length,
+    startsWith: secret.substring(0, 5),
   });
 });
 
@@ -353,12 +355,6 @@ app.get('/api/debug/jwt-roundtrip', async (req, res) => {
       error: err.message,
     });
   }
-});
-
-app.get('/api/debug/decode-token', authMiddleware, (req, res) => {
-  res.json({
-    userIdFromMiddleware: req.userId,
-  });
 });
 
 app.post('/api/debug/raw-decode', (req, res) => {
