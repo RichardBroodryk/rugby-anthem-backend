@@ -21,24 +21,36 @@ if (!JWT_SECRET) {
   throw new Error('JWT_SECRET missing from environment');
 }
 
-// ================= AUTH MIDDLEWARE =================
 function authMiddleware(req, res, next) {
   try {
-    const header = req.headers.authorization;
+    let header = req.headers.authorization;
 
-    if (!header) {
+    // 🔥 HARDEN: normalize header safely
+    if (Array.isArray(header)) {
+      header = header[0];
+    }
+
+    if (!header || typeof header !== 'string') {
       return res.status(401).json({ error: 'No token' });
     }
 
-    const parts = header.split(' ');
+    header = header.trim();
 
-    if (parts.length !== 2 || parts[0] !== 'Bearer') {
+    if (!header.toLowerCase().startsWith('bearer ')) {
       return res.status(401).json({ error: 'Invalid token format' });
     }
 
-    const token = parts[1];
+    const token = header.slice(7).trim();
+
+    if (!token) {
+      return res.status(401).json({ error: 'Token missing' });
+    }
 
     const decoded = jwt.verify(token, JWT_SECRET);
+
+    if (!decoded.userId) {
+      return res.status(401).json({ error: 'Token payload invalid' });
+    }
 
     req.userId = decoded.userId;
 
@@ -48,7 +60,6 @@ function authMiddleware(req, res, next) {
     return res.status(401).json({ error: 'Invalid token' });
   }
 }
-
 // ================= ROUTE MOUNTS =================
 app.use('/api/payments/paddle', paddleWebhook);
 app.use('/api/subscription', authMiddleware, subscriptionStatus);
