@@ -15,7 +15,7 @@ app.use(cors());
 app.use(express.json());
 
 // ================= JWT SECRET =================
-const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_SECRET = (process.env.JWT_SECRET || '').trim();
 
 if (!JWT_SECRET) {
   throw new Error('JWT_SECRET missing from environment');
