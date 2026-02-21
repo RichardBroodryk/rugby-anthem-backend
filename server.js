@@ -5,16 +5,13 @@ const pool = require('./db'); // ✅ unified DB connection
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
-const paddleWebhook = require('./routes/paddleWebhook'); // ✅ ADDED
+const paddleWebhook = require('./routes/paddleWebhook');
 const subscriptionStatus = require('./routes/subscriptionStatus');
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
-
-app.use('/api/payments/paddle', paddleWebhook); // ✅ ADDED
-app.use('/api/subscription', authMiddleware, subscriptionStatus);
 
 // ================= JWT SECRET =================
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret';
@@ -36,6 +33,10 @@ function authMiddleware(req, res, next) {
   }
 }
 
+// ✅ ROUTE MOUNTS (after middleware definition)
+app.use('/api/payments/paddle', paddleWebhook);
+app.use('/api/subscription', authMiddleware, subscriptionStatus);
+
 // ================= HEALTH CHECK =================
 app.get('/', (req, res) => {
   res.send('Rugby Anthem Zone backend is running');
@@ -44,6 +45,10 @@ app.get('/', (req, res) => {
 // ================= AUTH ROUTES =================
 app.post('/api/register', async (req, res) => {
   const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password required' });
+  }
 
   try {
     const hashed = await bcrypt.hash(password, 10);
@@ -55,8 +60,17 @@ app.post('/api/register', async (req, res) => {
 
     res.json({ userId: result.rows[0].id });
   } catch (err) {
-    console.error('Register error:', err);
-    res.status(400).json({ error: 'User already exists' });
+    console.error('Register error FULL:', err);
+
+    // duplicate email
+    if (err.code === '23505') {
+      return res.status(400).json({ error: 'User already exists' });
+    }
+
+    return res.status(500).json({
+      error: 'Registration failed',
+      detail: err.message,
+    });
   }
 });
 
