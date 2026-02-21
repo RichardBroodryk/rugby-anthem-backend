@@ -290,40 +290,6 @@ app.get('/api/comments', async (req, res) => {
 // ================= START SERVER =================
 const PORT = process.env.PORT || 4000;
 
-app.get('/api/debug/fix-users-schema', async (req, res) => {
-  try {
-    await pool.query(`
-      ALTER TABLE users
-      ADD COLUMN IF NOT EXISTS password_hash TEXT;
-    `);
-
-    const cols = await pool.query(`
-      SELECT column_name
-      FROM information_schema.columns
-      WHERE table_name = 'users'
-      ORDER BY column_name;
-    `);
-
-    res.json({
-      message: 'users table patched',
-      columns: cols.rows,
-    });
-  } catch (err) {
-    res.json({ error: err.message });
-  }
-});
-app.get('/api/debug/fix-password-constraint', async (req, res) => {
-  try {
-    await pool.query(`
-      ALTER TABLE users
-      ALTER COLUMN password DROP NOT NULL;
-    `);
-
-    res.json({ message: 'password column constraint relaxed' });
-  } catch (err) {
-    res.json({ error: err.message });
-  }
-});
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
