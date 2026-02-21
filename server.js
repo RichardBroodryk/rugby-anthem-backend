@@ -5,11 +5,14 @@ const pool = require('./db'); // ✅ unified DB connection
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
+const paddleWebhook = require('./routes/paddleWebhook'); // ✅ ADDED
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+app.use('/api/payments/paddle', paddleWebhook); // ✅ ADDED
 
 // ================= JWT SECRET =================
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret';
