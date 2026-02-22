@@ -12,7 +12,16 @@ const pool = require('../db');
 const PADDLE_API_KEY = process.env.PADDLE_API_KEY;
 const PREMIUM_PRICE_ID = process.env.PADDLE_PRICE_PREMIUM;
 const SUPER_PRICE_ID = process.env.PADDLE_PRICE_SUPER;
-const FRONTEND_URL = process.env.FRONTEND_URL || 'https://rugbyanthemzone.com';
+const FRONTEND_URL =
+  process.env.FRONTEND_URL || 'https://rugbyanthemzone.com';
+
+// 🔍 ENV sanity check (startup visibility)
+if (!PADDLE_API_KEY) {
+  console.error('❌ Missing PADDLE_API_KEY');
+}
+if (!PREMIUM_PRICE_ID || !SUPER_PRICE_ID) {
+  console.error('❌ Missing Paddle price IDs');
+}
 
 // =====================================================
 // POST /api/payments/create-checkout
@@ -22,12 +31,14 @@ router.post('/create-checkout', async (req, res) => {
     const { tier } = req.body;
     const userId = req.userId;
 
+    console.log('🧾 Checkout request:', { tier, userId });
+
     if (!tier) {
       return res.status(400).json({ error: 'Tier required' });
     }
 
     // -------------------------------------------------
-    // Get user
+    // Get user email
     // -------------------------------------------------
     const userResult = await pool.query(
       'SELECT email FROM users WHERE id = $1',
@@ -42,7 +53,6 @@ router.post('/create-checkout', async (req, res) => {
 
     // -------------------------------------------------
     // Map tier → price_id
-    // NEVER send raw prices
     // -------------------------------------------------
     let priceId;
 
@@ -54,8 +64,10 @@ router.post('/create-checkout', async (req, res) => {
       return res.status(400).json({ error: 'Invalid tier' });
     }
 
+    console.log('💳 Using priceId:', priceId);
+
     // -------------------------------------------------
-    // Create Paddle checkout session
+    // Create Paddle transaction
     // -------------------------------------------------
     const paddleRes = await axios.post(
       'https://api.paddle.com/transactions',
@@ -73,13 +85,8 @@ router.post('/create-checkout', async (req, res) => {
           user_id: userId,
           tier,
         },
-
-        // ✅ REQUIRED FOR BILLING V2 HOSTED CHECKOUT
-    checkout: {
-  url: FRONTEND_URL,
-  success_url: `${FRONTEND_URL}/success`,
-  cancel_url: `${FRONTEND_URL}/cancel`,
-},
+      },
+      {
         headers: {
           Authorization: `Bearer ${PADDLE_API_KEY}`,
           'Content-Type': 'application/json',
@@ -89,14 +96,24 @@ router.post('/create-checkout', async (req, res) => {
 
     const checkoutUrl = paddleRes.data?.data?.checkout?.url;
 
+    console.log('✅ Paddle response received');
+
     if (!checkoutUrl) {
+      console.error('❌ Checkout URL missing from Paddle response');
       return res.status(500).json({ error: 'Checkout URL missing' });
     }
 
-    res.json({ checkoutUrl });
+    return res.json({ checkoutUrl });
   } catch (err) {
-    console.error('Paddle checkout error:', err.response?.data || err.message);
-    res.status(500).json({ error: 'Checkout creation failed' });
+    console.error(
+      '❌ Paddle checkout error FULL:',
+      err.response?.data || err.message
+    );
+
+    return res.status(500).json({
+      error: 'Checkout creation failed',
+      paddle: err.response?.data || err.message,
+    });
   }
 });
 
