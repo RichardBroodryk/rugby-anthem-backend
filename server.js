@@ -12,6 +12,11 @@ const createCheckout = require('./routes/createCheckout');
 const app = express();
 
 app.use(cors());
+
+// ✅ CRITICAL — Paddle webhook MUST be before express.json
+app.use('/api/webhooks/paddle', paddleWebhook);
+
+// JSON parser for everything else
 app.use(express.json());
 
 // ================= JWT SECRET (TRIMMED) =================
@@ -63,7 +68,6 @@ function authMiddleware(req, res, next) {
 }
 
 // ================= ROUTE MOUNTS =================
-app.use('/api/payments/paddle', paddleWebhook);
 app.use('/api/subscription', authMiddleware, subscriptionStatus);
 app.use('/api/payments', authMiddleware, createCheckout);
 
@@ -318,7 +322,7 @@ app.get('/api/comments', async (req, res) => {
   }
 });
 
-// ================= DEBUG ROUTES =================
+// ================= DEBUG ROUTES (KEEP — VERY USEFUL) =================
 app.get('/api/debug/auth-check', authMiddleware, (req, res) => {
   res.json({
     ok: true,

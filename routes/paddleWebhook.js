@@ -7,13 +7,19 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../db");
 
+// 🔐 RAW BODY for Paddle
+router.use(express.raw({ type: "application/json" }));
+
 // =====================================================
 // MAIN WEBHOOK
 // =====================================================
 
-router.post("/webhook", async (req, res) => {
+router.post("/", async (req, res) => {
   try {
-    const event = req.body;
+    const event =
+      typeof req.body === "string"
+        ? JSON.parse(req.body)
+        : JSON.parse(req.body.toString());
 
     const eventId = event?.event_id || event?.id;
     const eventType = event?.event_type || event?.type;
@@ -51,6 +57,7 @@ router.post("/webhook", async (req, res) => {
 
       case "transaction.paid":
       case "transaction_paid":
+      case "transaction.completed":
         await handleTransactionPaid(event);
         break;
 
@@ -101,7 +108,6 @@ async function handleSubscriptionCreated(event) {
     const priceId = sub.items?.[0]?.price?.id || sub.price_id;
     const status = sub.status || "active";
 
-    // find tier from price
     const tierRes = await pool.query(
       `SELECT tier_code FROM tiers WHERE paddle_price_id = $1`,
       [priceId]
@@ -109,7 +115,6 @@ async function handleSubscriptionCreated(event) {
 
     const tierCode = tierRes.rows[0]?.tier_code || "premium";
 
-    // find user by paddle customer id
     const userRes = await pool.query(
       `SELECT id FROM users WHERE paddle_customer_id = $1`,
       [customerId]
@@ -122,7 +127,6 @@ async function handleSubscriptionCreated(event) {
 
     const userId = userRes.rows[0].id;
 
-    // upsert subscription
     await pool.query(
       `INSERT INTO subscriptions
        (user_id, paddle_subscription_id, paddle_customer_id, tier_code, status)
