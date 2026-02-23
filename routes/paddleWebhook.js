@@ -115,17 +115,42 @@ async function handleSubscriptionCreated(event) {
 
     const tierCode = tierRes.rows[0]?.tier_code || "premium";
 
-    const userRes = await pool.query(
-      `SELECT id FROM users WHERE paddle_customer_id = $1`,
-      [customerId]
-    );
+   // =====================================================
+// 🔎 FIND USER (fallback to custom_data.user_id)
+// =====================================================
 
-    if (userRes.rows.length === 0) {
-      console.log("⚠️ User not found for Paddle customer:", customerId);
-      return;
-    }
+let userId = null;
 
-    const userId = userRes.rows[0].id;
+// First try by Paddle customer id
+const userByCustomer = await pool.query(
+  `SELECT id FROM users WHERE paddle_customer_id = $1`,
+  [customerId]
+);
+
+if (userByCustomer.rows.length > 0) {
+  userId = userByCustomer.rows[0].id;
+} else {
+  // Fallback to custom_data from checkout
+  const fallbackUserId = event?.data?.custom_data?.user_id;
+
+  if (!fallbackUserId) {
+    console.log("⚠️ No user match and no custom_data.user_id");
+    return;
+  }
+
+  userId = fallbackUserId;
+
+  // 🔥 BACKFILL paddle_customer_id onto user
+  await pool.query(
+    `UPDATE users
+     SET paddle_customer_id = $1,
+         updated_at = NOW()
+     WHERE id = $2`,
+    [customerId, userId]
+  );
+
+  console.log("🧩 Backfilled paddle_customer_id for user:", userId);
+}
 
     await pool.query(
       `INSERT INTO subscriptions
