@@ -29,8 +29,6 @@ if (!JWT_SECRET) {
 // ================= AUTH MIDDLEWARE (HARDENED) =================
 function authMiddleware(req, res, next) {
   try {
-    console.log('MIDDLEWARE SECRET LEN →', JWT_SECRET.length);
-
     let header = req.headers.authorization;
 
     if (Array.isArray(header)) {
@@ -78,16 +76,9 @@ app.get('/', (req, res) => {
 
 // ================= AUTH ROUTES =================
 app.post('/api/register', async (req, res) => {
-  console.log('🧪 REGISTER BODY TYPE:', typeof req.body);
-  console.log('🧪 REGISTER BODY RAW:', req.body);
-
   const { email, password } = req.body || {};
 
-  console.log('🧪 EMAIL:', email);
-  console.log('🧪 PASSWORD EXISTS:', !!password);
-
   if (!email || !password) {
-    console.log('❌ REGISTER VALIDATION FAILED');
     return res.status(400).json({ error: 'Email and password required' });
   }
 
@@ -114,12 +105,18 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
+// ================= LOGIN (HARDENED — FIXES YOUR BUG) =================
 app.post('/api/login', async (req, res) => {
-  const { email, password } = req.body;
-
   try {
+    const { email, password } = req.body || {};
+
+    // 🔒 guard missing body
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password required' });
+    }
+
     const result = await pool.query(
-      'SELECT * FROM users WHERE email = $1',
+      'SELECT id, email, password_hash FROM users WHERE email = $1',
       [email]
     );
 
@@ -128,13 +125,20 @@ app.post('/api/login', async (req, res) => {
     }
 
     const user = result.rows[0];
+
+    // 🔥 CRITICAL GUARD — prevents bcrypt crash
+    if (!user.password_hash) {
+      console.error('❌ User missing password_hash:', user.email);
+      return res.status(401).json({
+        error: 'Account not properly set up',
+      });
+    }
+
     const valid = await bcrypt.compare(password, user.password_hash);
 
     if (!valid) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-
-    console.log('LOGIN SECRET LEN →', JWT_SECRET.length);
 
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, {
       expiresIn: '7d',
@@ -142,7 +146,7 @@ app.post('/api/login', async (req, res) => {
 
     res.json({ token });
   } catch (err) {
-    console.error('Login error:', err);
+    console.error('Login error FULL:', err);
     res.status(500).json({ error: 'Login failed' });
   }
 });
