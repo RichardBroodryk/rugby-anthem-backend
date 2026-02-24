@@ -1,21 +1,54 @@
 // =====================================================
 // Paddle Webhook Handler — Rugby Anthem Zone
-// PRODUCTION SUBSCRIPTION LOGIC
+// PRODUCTION SUBSCRIPTION LOGIC (HARDENED)
 // =====================================================
 
 const express = require("express");
+const crypto = require("crypto");
 const router = express.Router();
 const pool = require("../db");
 
-// 🔐 RAW BODY for Paddle
+// =====================================================
+// 🔐 RAW BODY for Paddle (MUST come before JSON parsing)
+// =====================================================
 router.use(express.raw({ type: "application/json" }));
+
+// =====================================================
+// 🔐 SIGNATURE VERIFICATION
+// =====================================================
+function verifyPaddleSignature(req) {
+  const signature = req.headers["paddle-signature"];
+  const secret = process.env.PADDLE_WEBHOOK_SECRET;
+
+  if (!signature) {
+    throw new Error("Missing Paddle signature header");
+  }
+
+  if (!secret) {
+    throw new Error("Missing PADDLE_WEBHOOK_SECRET");
+  }
+
+  const rawBody = req.body; // Buffer
+
+  const expected = crypto
+    .createHmac("sha256", secret)
+    .update(rawBody)
+    .digest("hex");
+
+  if (expected !== signature) {
+    throw new Error("Invalid Paddle signature");
+  }
+}
 
 // =====================================================
 // MAIN WEBHOOK
 // =====================================================
-
 router.post("/", async (req, res) => {
   try {
+    // 🔐 VERIFY FIRST (before trusting payload)
+    verifyPaddleSignature(req);
+
+    // safe parse
     const event =
       typeof req.body === "string"
         ? JSON.parse(req.body)
@@ -29,22 +62,19 @@ router.post("/", async (req, res) => {
     }
 
     // ================= IDEMPOTENCY =================
-    const existing = await pool.query(
-      `SELECT id FROM webhook_events WHERE paddle_event_id = $1`,
-      [eventId]
+    const insertResult = await pool.query(
+      `INSERT INTO webhook_events (paddle_event_id, event_type, processed)
+       VALUES ($1, $2, false)
+       ON CONFLICT (paddle_event_id) DO NOTHING
+       RETURNING id`,
+      [eventId, eventType]
     );
 
-    if (existing.rows.length > 0) {
+    // duplicate event
+    if (insertResult.rows.length === 0) {
       console.log("⚠️ Duplicate Paddle webhook ignored:", eventId);
       return res.json({ received: true });
     }
-
-    // record webhook receipt
-    await pool.query(
-      `INSERT INTO webhook_events (paddle_event_id, event_type, processed)
-       VALUES ($1, $2, false)`,
-      [eventId, eventType]
-    );
 
     console.log("📩 Paddle event:", eventType);
 
@@ -90,7 +120,7 @@ router.post("/", async (req, res) => {
 
     res.json({ received: true });
   } catch (err) {
-    console.error("❌ Paddle webhook error:", err);
+    console.error("❌ Paddle webhook error:", err.message || err);
     res.status(500).json({ error: "Webhook failed" });
   }
 });
@@ -106,59 +136,72 @@ async function handleSubscriptionCreated(event) {
     const paddleSubId = sub.id || sub.subscription_id;
     const customerId = sub.customer_id;
     const priceId = sub.items?.[0]?.price?.id || sub.price_id;
-    const status = sub.status || "active";
+    const statusRaw = sub.status || "active";
 
+    const normalizedStatus =
+      statusRaw === "active" || statusRaw === "trialing"
+        ? "active"
+        : statusRaw;
+
+    // 🔎 Resolve tier
     const tierRes = await pool.query(
       `SELECT tier_code FROM tiers WHERE paddle_price_id = $1`,
       [priceId]
     );
 
-    const tierCode = tierRes.rows[0]?.tier_code || "premium";
+    if (!tierRes.rows.length) {
+      console.error("❌ Unknown price_id:", priceId);
+      return;
+    }
 
-   // =====================================================
-// 🔎 FIND USER (fallback to custom_data.user_id)
-// =====================================================
+    const tierCode = tierRes.rows[0].tier_code;
 
-let userId = null;
+    // =====================================================
+    // 🔎 FIND USER (fallback to custom_data.user_id)
+    // =====================================================
 
-// First try by Paddle customer id
-const userByCustomer = await pool.query(
-  `SELECT id FROM users WHERE paddle_customer_id = $1`,
-  [customerId]
-);
+    let userId = null;
 
-if (userByCustomer.rows.length > 0) {
-  userId = userByCustomer.rows[0].id;
-} else {
-  // Fallback to custom_data from checkout
-  const fallbackUserId = event?.data?.custom_data?.user_id;
+    // try by customer id first
+    const userByCustomer = await pool.query(
+      `SELECT id FROM users WHERE paddle_customer_id = $1`,
+      [customerId]
+    );
 
-  if (!fallbackUserId) {
-    console.log("⚠️ No user match and no custom_data.user_id");
-    return;
-  }
+    if (userByCustomer.rows.length > 0) {
+      userId = userByCustomer.rows[0].id;
+    } else {
+      const fallbackUserId = event?.data?.custom_data?.user_id;
 
-  userId = fallbackUserId;
+      if (!fallbackUserId) {
+        console.log("⚠️ No user match and no custom_data.user_id");
+        return;
+      }
 
-  // 🔥 BACKFILL paddle_customer_id onto user
-  await pool.query(
-    `UPDATE users
-     SET paddle_customer_id = $1,
-         updated_at = NOW()
-     WHERE id = $2`,
-    [customerId, userId]
-  );
+      userId = fallbackUserId;
 
-  console.log("🧩 Backfilled paddle_customer_id for user:", userId);
-}
+      // 🔥 backfill customer id
+      await pool.query(
+        `UPDATE users
+         SET paddle_customer_id = $1,
+             updated_at = NOW()
+         WHERE id = $2`,
+        [customerId, userId]
+      );
 
+      console.log("🧩 Backfilled paddle_customer_id for user:", userId);
+    }
+
+    // upsert subscription
     await pool.query(
       `INSERT INTO subscriptions
        (user_id, paddle_subscription_id, paddle_customer_id, tier_code, status)
        VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (paddle_subscription_id)
-       DO UPDATE SET status = EXCLUDED.status, tier_code = EXCLUDED.tier_code`,
-      [userId, paddleSubId, customerId, tierCode, status]
+       DO UPDATE SET
+         status = EXCLUDED.status,
+         tier_code = EXCLUDED.tier_code`,
+      [userId, paddleSubId, customerId, tierCode, normalizedStatus]
     );
 
     await updateUserAccess(userId, tierCode);
