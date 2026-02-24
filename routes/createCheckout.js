@@ -67,7 +67,7 @@ router.post('/create-checkout', async (req, res) => {
     console.log('💳 Using priceId:', priceId);
 
     // -------------------------------------------------
-    // Create Paddle transaction
+    // 🔥 CREATE PADDLE TRANSACTION (FIXED)
     // -------------------------------------------------
     const paddleRes = await axios.post(
       'https://api.paddle.com/transactions',
@@ -85,6 +85,12 @@ router.post('/create-checkout', async (req, res) => {
           user_id: userId,
           tier,
         },
+
+        // ✅ CRITICAL: forces hosted checkout session
+        checkout: {
+          success_url: `${FRONTEND_URL}/access-granted`,
+          cancel_url: `${FRONTEND_URL}/pricing`,
+        },
       },
       {
         headers: {
@@ -97,6 +103,7 @@ router.post('/create-checkout', async (req, res) => {
     const checkoutUrl = paddleRes.data?.data?.checkout?.url;
 
     console.log('✅ Paddle response received');
+    console.log('🔗 Checkout URL:', checkoutUrl);
 
     if (!checkoutUrl) {
       console.error('❌ Checkout URL missing from Paddle response');
