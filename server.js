@@ -9,14 +9,25 @@ const paddleWebhook = require('./routes/paddleWebhook');
 const subscriptionStatus = require('./routes/subscriptionStatus');
 const createCheckout = require('./routes/createCheckout');
 
+const rugbyRoutes = require("./routes/testRugby");
+
+console.log("API SPORTS KEY:", process.env.API_SPORTS_KEY);
+
+const statsGateway = require("./routes/statsGateway");
+
 const app = express();
 
 // ================= MIDDLEWARE =================
 app.use(cors());
 app.use(express.json());
 
+// ================= RUGBY API ROUTES =================
+app.use("/api", rugbyRoutes);
+
 // Paddle webhook (no auth)
 app.use('/api/webhooks/paddle', paddleWebhook);
+
+app.use("/api/stats", statsGateway);
 
 // ================= JWT SECRET =================
 const JWT_SECRET = (process.env.JWT_SECRET || '').trim();
