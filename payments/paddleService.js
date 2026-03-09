@@ -11,19 +11,21 @@ const SUPER_PRICE_ID = process.env.PADDLE_PRICE_SUPER;
 
 async function createCheckout({ tier, email }) {
 
-  console.log("----- PADDLE REQUEST -----");
+  console.log("----- CREATE CHECKOUT -----");
   console.log("Tier:", tier);
   console.log("Email:", email);
-  console.log("Price Premium:", PREMIUM_PRICE_ID);
-  console.log("--------------------------");
+  console.log("Premium Price:", PREMIUM_PRICE_ID);
+  console.log("---------------------------");
 
   let priceId;
 
   if (tier === "premium") {
     priceId = PREMIUM_PRICE_ID;
-  } else if (tier === "super") {
+  } 
+  else if (tier === "super") {
     priceId = SUPER_PRICE_ID;
-  } else {
+  } 
+  else {
     throw new Error("Invalid tier");
   }
 
@@ -37,10 +39,7 @@ async function createCheckout({ tier, email }) {
             price_id: priceId,
             quantity: 1
           }
-        ],
-
-        customer_email: email
-
+        ]
       },
       {
         headers: {
@@ -50,35 +49,32 @@ async function createCheckout({ tier, email }) {
       }
     );
 
-    const transactionId = response.data?.data?.id;
+    const transaction = response.data?.data;
 
-    if (!transactionId) {
-      throw new Error("Transaction ID missing");
+    if (!transaction || !transaction.id) {
+      console.error("Invalid Paddle response:", response.data);
+      throw new Error("Transaction creation failed");
     }
 
-    console.log("✅ Paddle transaction:", transactionId);
-
-    const checkoutUrl = response.data.data.checkout.url;
+    console.log("Paddle transaction created:", transaction.id);
 
     return {
-      checkoutUrl
+      checkoutUrl: transaction.checkout.url
     };
 
   } catch (err) {
 
-    console.error("❌ PADDLE ERROR");
+    console.error("PADDLE API ERROR");
 
     if (err.response) {
       console.error("Status:", err.response.status);
-      console.error("Data:", err.response.data);
+      console.error("Response:", err.response.data);
     } else {
       console.error(err.message);
     }
 
     throw new Error("Paddle transaction creation failed");
-
   }
-
 }
 
 module.exports = {
