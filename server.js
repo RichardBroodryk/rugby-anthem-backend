@@ -1,4 +1,5 @@
 require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const pool = require('./db');
@@ -10,24 +11,47 @@ const subscriptionStatus = require('./routes/subscriptionStatus');
 const createCheckout = require('./routes/createCheckout');
 
 const rugbyRoutes = require("./routes/testRugby");
+const statsGateway = require("./routes/statsGateway");
 
 console.log("API SPORTS KEY:", process.env.API_SPORTS_KEY);
 
-const statsGateway = require("./routes/statsGateway");
-
 const app = express();
 
-// ================= MIDDLEWARE =================
-app.use(cors());
+
+// ================= CORS CONFIG =================
+app.use(
+  cors({
+    origin: [
+      "https://www.rugbyanthemzone.com",
+      "https://rugbyanthemzone.com",
+      "http://localhost:3000"
+    ],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true
+  })
+);
+
+// Handle browser preflight requests
+app.options("*", cors());
+
+
+// ================= BODY PARSER =================
 app.use(express.json());
+
 
 // ================= RUGBY API ROUTES =================
 app.use("/api", rugbyRoutes);
 
-// Paddle webhook (no auth)
+
+// ================= STATS GATEWAY =================
+app.use("/api/stats", statsGateway);
+
+
+// ================= PADDLE WEBHOOK =================
+// Must be public (no auth)
 app.use('/api/webhooks/paddle', paddleWebhook);
 
-app.use("/api/stats", statsGateway);
 
 // ================= JWT SECRET =================
 const JWT_SECRET = (process.env.JWT_SECRET || '').trim();
@@ -36,9 +60,11 @@ if (!JWT_SECRET) {
   throw new Error('JWT_SECRET missing from environment');
 }
 
+
 // ================= AUTH MIDDLEWARE =================
 function authMiddleware(req, res, next) {
   try {
+
     let header = req.headers.authorization;
 
     if (Array.isArray(header)) header = header[0];
@@ -58,19 +84,23 @@ function authMiddleware(req, res, next) {
     req.userEmail = decoded.email || null;
 
     return next();
+
   } catch (err) {
     console.error('AUTH FAIL:', err.message);
     return res.status(401).json({ error: 'Invalid token' });
   }
 }
 
-// ================= HEALTH =================
+
+// ================= HEALTH CHECK =================
 app.get('/', (req, res) => {
   res.send('Rugby Anthem Zone backend is running');
 });
 
+
 // ================= REGISTER =================
 app.post('/api/register', async (req, res) => {
+
   const { email, password } = req.body || {};
 
   if (!email || !password) {
@@ -78,6 +108,7 @@ app.post('/api/register', async (req, res) => {
   }
 
   try {
+
     const hashed = await bcrypt.hash(password, 10);
 
     const result = await pool.query(
@@ -87,9 +118,11 @@ app.post('/api/register', async (req, res) => {
 
     return res.json({
       userId: result.rows[0].id,
-      email: result.rows[0].email,
+      email: result.rows[0].email
     });
+
   } catch (err) {
+
     console.error('Register error:', err);
 
     if (err.code === '23505') {
@@ -100,14 +133,16 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
-// ================= LOGIN (BULLETPROOF) =================
-// ================= LOGIN (FORCED EMAIL PAYLOAD) =================
+
+// ================= LOGIN =================
 app.post('/api/login', async (req, res) => {
+
   console.log('🔥 LOGIN ROUTE HIT — SERVER.JS');
 
   const { email, password } = req.body;
 
   try {
+
     const result = await pool.query(
       'SELECT id, email, password_hash FROM users WHERE email = $1',
       [email]
@@ -125,10 +160,9 @@ app.post('/api/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    // 🔒 FORCE STRING NORMALIZATION
     const payload = {
       userId: String(user.id),
-      email: String(user.email),
+      email: String(user.email)
     };
 
     console.log('✅ JWT PAYLOAD ABOUT TO SIGN:', payload);
@@ -136,17 +170,22 @@ app.post('/api/login', async (req, res) => {
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
 
     return res.json({ token });
+
   } catch (err) {
+
     console.error('Login error:', err);
     return res.status(500).json({ error: 'Login failed' });
+
   }
 });
+
 
 // ================= PROTECTED ROUTES =================
 app.use('/api/subscription', authMiddleware, subscriptionStatus);
 app.use('/api/payments', authMiddleware, createCheckout);
 
-// ================= START =================
+
+// ================= START SERVER =================
 const PORT = process.env.PORT || 4000;
 
 app.listen(PORT, () => {
