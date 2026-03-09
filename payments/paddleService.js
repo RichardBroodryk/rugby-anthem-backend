@@ -43,7 +43,7 @@ async function createCheckout({ tier, email }) {
           }
         ],
 
-        // ✅ Correct Paddle v2 field
+        // Paddle v2 correct field
         customer_email: email,
 
         custom_data: {
@@ -82,8 +82,8 @@ async function createCheckout({ tier, email }) {
 
   console.log("✅ Paddle transaction created:", transactionId);
 
-  // Paddle hosted checkout
-  const checkoutUrl = `https://checkout.paddle.com/transaction/${transactionId}`;
+  // 🔹 RESTORE WORKING FLOW
+  const checkoutUrl = `${FRONTEND_URL}/terms?_ptxn=${transactionId}`;
 
   return {
     checkoutUrl
