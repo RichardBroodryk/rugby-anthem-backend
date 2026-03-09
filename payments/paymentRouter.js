@@ -3,7 +3,6 @@
 // =====================================================
 
 const paddleService = require("./paddleService");
-const ozowService = require("./ozowService");
 
 async function createCheckout({ provider, tier, email }) {
 
@@ -15,6 +14,8 @@ async function createCheckout({ provider, tier, email }) {
       return paddleService.createCheckout({ tier, email });
 
     case "ozow":
+
+      const ozowService = require("./ozowService");
       return ozowService.createCheckout({ tier, email });
 
     default:
