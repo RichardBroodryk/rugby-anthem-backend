@@ -5,7 +5,7 @@
 const axios = require("axios");
 
 // ENV
-const PADDLE_API_KEY = process.env.PADDLE_API_KEY;
+const PADDLE_API_KEY = (process.env.PADDLE_API_KEY || "").trim();
 const PREMIUM_PRICE_ID = process.env.PADDLE_PRICE_PREMIUM;
 const SUPER_PRICE_ID = process.env.PADDLE_PRICE_SUPER;
 const FRONTEND_URL = process.env.FRONTEND_URL;
