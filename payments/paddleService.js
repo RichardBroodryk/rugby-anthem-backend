@@ -12,7 +12,12 @@ const FRONTEND_URL = process.env.FRONTEND_URL;
 
 async function createCheckout({ tier, email }) {
 
-  console.log("🧾 Paddle checkout:", { tier, email });
+  console.log("🧾 Paddle checkout request:", {
+    tier,
+    email,
+    PREMIUM_PRICE_ID,
+    SUPER_PRICE_ID
+  });
 
   let priceId;
 
@@ -24,41 +29,58 @@ async function createCheckout({ tier, email }) {
     throw new Error("Invalid tier");
   }
 
-  const paddleRes = await axios.post(
-    "https://api.paddle.com/transactions",
-    {
-      items: [
-        {
-          price_id: priceId,
-          quantity: 1
-        }
-      ],
-      customer: {
-        email
-      },
-      custom_data: {
-        tier,
-        user_id: email
-      }
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${PADDLE_API_KEY}`,
-        "Content-Type": "application/json"
-      }
-    }
-  );
+  let paddleRes;
 
-  const transactionId = paddleRes.data?.data?.id;
+  try {
+
+    paddleRes = await axios.post(
+      "https://api.paddle.com/transactions",
+      {
+        items: [
+          {
+            price_id: priceId,
+            quantity: 1
+          }
+        ],
+        customer: {
+          email: email
+        },
+        custom_data: {
+          tier: tier,
+          user_id: email
+        }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${PADDLE_API_KEY}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+  } catch (err) {
+
+    console.error("❌ PADDLE API ERROR FULL:");
+
+    if (err.response) {
+      console.error("Status:", err.response.status);
+      console.error("Data:", err.response.data);
+    } else {
+      console.error("Message:", err.message);
+    }
+
+    throw new Error("Paddle transaction creation failed");
+  }
+
+  const transactionId = paddleRes?.data?.data?.id;
 
   if (!transactionId) {
-    console.error("Paddle response:", paddleRes.data);
+    console.error("❌ Paddle response missing transaction ID:", paddleRes?.data);
     throw new Error("Transaction ID missing");
   }
 
   console.log("✅ Paddle transaction created:", transactionId);
 
-  // Correct Paddle checkout URL
   const checkoutUrl = `https://checkout.paddle.com/transaction/${transactionId}`;
 
   return {
