@@ -52,10 +52,14 @@ async function createCheckout({ tier, email }) {
   const transactionId = paddleRes.data?.data?.id;
 
   if (!transactionId) {
+    console.error("Paddle response:", paddleRes.data);
     throw new Error("Transaction ID missing");
   }
 
-  const checkoutUrl = `${FRONTEND_URL}/terms?_ptxn=${transactionId}`;
+  console.log("✅ Paddle transaction created:", transactionId);
+
+  // Correct Paddle checkout URL
+  const checkoutUrl = `https://checkout.paddle.com/transaction/${transactionId}`;
 
   return {
     checkoutUrl
