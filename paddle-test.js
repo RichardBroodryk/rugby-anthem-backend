@@ -8,7 +8,7 @@ const axios = require("axios");
 
 // ENV VARIABLES
 const PADDLE_API_KEY = process.env.PADDLE_API_KEY;
-const PRICE_ID = process.env.PADDLE_PRICE_PREMIUM;
+const PRICE_ID = "pri_01khxjt428mgbphxfv3j1748rf";
 
 async function run() {
 
