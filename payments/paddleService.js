@@ -5,31 +5,42 @@
 require("dotenv").config();
 const axios = require("axios");
 
-// ENV
+// ENV VARIABLES
 const PADDLE_API_KEY = process.env.PADDLE_API_KEY;
 const PREMIUM_PRICE_ID = process.env.PADDLE_PRICE_PREMIUM;
 const SUPER_PRICE_ID = process.env.PADDLE_PRICE_SUPER;
 
 async function createCheckout({ tier, email }) {
 
-  console.log("🧾 Paddle checkout request:", {
-    tier,
-    email,
-    PREMIUM_PRICE_ID,
-    SUPER_PRICE_ID
-  });
+  // ---------------------------------------------------
+  // ENV DEBUG (very important)
+  // ---------------------------------------------------
+
+  console.log("----- PADDLE ENV CHECK -----");
+
+  console.log("KEY LENGTH:", PADDLE_API_KEY ? PADDLE_API_KEY.length : "undefined");
+  console.log("PREMIUM PRICE:", PREMIUM_PRICE_ID);
+  console.log("SUPER PRICE:", SUPER_PRICE_ID);
+
+  console.log("----------------------------");
+
+
+  // ---------------------------------------------------
+  // Determine price
+  // ---------------------------------------------------
 
   let priceId;
 
   if (tier === "premium") {
     priceId = PREMIUM_PRICE_ID;
-  } 
+  }
   else if (tier === "super") {
     priceId = SUPER_PRICE_ID;
-  } 
+  }
   else {
     throw new Error("Invalid tier");
   }
+
 
   try {
 
@@ -43,7 +54,6 @@ async function createCheckout({ tier, email }) {
           }
         ],
 
-        // Paddle v2 customer field
         customer_email: email,
 
         custom_data: {
@@ -59,6 +69,7 @@ async function createCheckout({ tier, email }) {
       }
     );
 
+
     const transactionId = paddleRes?.data?.data?.id;
 
     if (!transactionId) {
@@ -68,8 +79,10 @@ async function createCheckout({ tier, email }) {
 
     console.log("✅ Paddle transaction created:", transactionId);
 
-    // Use Paddle's checkout URL
+
+    // Use Paddle's hosted checkout URL
     const checkoutUrl = paddleRes.data.data.checkout.url;
+
 
     return {
       checkoutUrl
