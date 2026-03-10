@@ -10,6 +10,8 @@ const PREMIUM_PRICE_ID = process.env.PADDLE_PRICE_PREMIUM;
 const SUPER_PRICE_ID = process.env.PADDLE_PRICE_SUPER;
 const FRONTEND_URL = process.env.FRONTEND_URL;
 
+
+
 async function createCheckout({ tier, email }) {
 
   console.log("🧾 Paddle checkout request:", {
@@ -37,7 +39,16 @@ async function createCheckout({ tier, email }) {
             price_id: priceId,
             quantity: 1
           }
-        ]
+        ],
+
+        customer: {
+          email: email
+        },
+
+        custom_data: {
+          tier: tier
+        }
+
       },
       {
         headers: {
@@ -50,8 +61,14 @@ async function createCheckout({ tier, email }) {
     const transactionId = paddleRes?.data?.data?.id;
 
     if (!transactionId) {
-      console.error("❌ Paddle response missing transaction ID:", paddleRes?.data);
+
+      console.error(
+        "❌ Paddle response missing transaction ID:",
+        paddleRes?.data
+      );
+
       throw new Error("Transaction ID missing");
+
     }
 
     console.log("✅ Paddle transaction created:", transactionId);
@@ -64,7 +81,7 @@ async function createCheckout({ tier, email }) {
 
   } catch (err) {
 
-    console.error("❌ PADDLE API ERROR FULL:");
+    console.error("❌ PADDLE API ERROR");
 
     if (err.response) {
       console.error("Status:", err.response.status);
@@ -74,8 +91,12 @@ async function createCheckout({ tier, email }) {
     }
 
     throw new Error("Paddle transaction creation failed");
+
   }
+
 }
+
+
 
 module.exports = {
   createCheckout
