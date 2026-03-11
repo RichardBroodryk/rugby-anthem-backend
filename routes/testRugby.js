@@ -109,20 +109,12 @@ router.get("/test-dsg", async (req, res) => {
 
   try {
 
-    const response = await axios.get(
-      "https://dsg-api.com/clients/rugbyanthem/rugby/get_matches",
-      {
-        params: {
-          type: "match",
-          id: "3748401",
-          client: "rugbyanthem",
-          authkey: process.env.DSG_AUTH_KEY
-        },
-        headers: {
-          "Accept": "application/json"
-        }
-      }
-    );
+    const url =
+      "https://dsg-api.com/clients/rugbyanthem/rugby/get_matches" +
+      "?type=match&id=3748401&client=rugbyanthem&authkey=" +
+      process.env.DSG_AUTH_KEY;
+
+    const response = await axios.get(url);
 
     res.json(response.data);
 
@@ -133,7 +125,7 @@ router.get("/test-dsg", async (req, res) => {
     res.status(500).json({
       error: "DSG request failed",
       axiosError: error.message,
-      dsgStatus: error.response?.status,
+      status: error.response?.status,
       dsgResponse: error.response?.data
     });
 
