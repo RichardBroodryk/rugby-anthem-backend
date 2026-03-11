@@ -21,6 +21,7 @@ TEST API-SPORTS CONNECTION
 */
 
 router.get("/test-rugby", async (req, res) => {
+
   try {
 
     const response = await axios.get(
@@ -49,6 +50,7 @@ router.get("/test-rugby", async (req, res) => {
     });
 
   }
+
 });
 
 
@@ -97,7 +99,7 @@ router.get("/matches", async (req, res) => {
 
 /*
 =====================================
-TEST DSG FIXTURES
+TEST DSG RUGBY MATCHES
 =====================================
 */
 
@@ -106,10 +108,10 @@ router.get("/test-dsg", async (req, res) => {
   try {
 
     const response = await axios.get(
-      `${DSG_BASE_URL}/fixtures`,
+      `${DSG_BASE_URL}/rugby/get_matches`,
       {
-        headers: {
-          Authorization: DSG_AUTH_KEY
+        params: {
+          authkey: DSG_AUTH_KEY
         }
       }
     );
@@ -127,7 +129,7 @@ router.get("/test-dsg", async (req, res) => {
     }
 
     res.status(500).json({
-      error: "Failed to fetch DSG data"
+      error: "Failed to fetch DSG rugby matches"
     });
 
   }
