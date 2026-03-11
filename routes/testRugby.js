@@ -4,21 +4,20 @@ const axios = require("axios");
 const router = express.Router();
 
 /*
-==============================
+=====================================
 CONFIG
-==============================
+=====================================
 */
 
 const DSG_BASE_URL = "https://dsg-api.com/clients";
-
 const DSG_CLIENT = "rugbyanthem";
 const DSG_AUTH_KEY = process.env.DSG_AUTH_KEY;
 
 
 /*
-==============================
-API SPORTS TEST
-==============================
+=====================================
+TEST API SPORTS CONNECTION
+=====================================
 */
 
 router.get("/test-rugby", async (req, res) => {
@@ -38,9 +37,16 @@ router.get("/test-rugby", async (req, res) => {
 
   } catch (error) {
 
+    console.error("API-Sports error:");
+
+    if (error.response) {
+      console.error(error.response.data);
+    } else {
+      console.error(error.message);
+    }
+
     res.status(500).json({
-      error: "API-Sports failed",
-      details: error.message
+      error: "Failed to fetch rugby data"
     });
 
   }
@@ -49,22 +55,23 @@ router.get("/test-rugby", async (req, res) => {
 
 
 /*
-==============================
-DSG MATCH TEST
-==============================
+=====================================
+TEST API SPORTS MATCHES
+=====================================
 */
 
-router.get("/test-dsg", async (req, res) => {
+router.get("/matches", async (req, res) => {
 
   try {
 
     const response = await axios.get(
-      "https://dsg-api.com/clients/rugbyanthem/rugby/get_matches_day",
+      "https://v1.rugby.api-sports.io/games",
       {
+        headers: {
+          "x-apisports-key": process.env.API_SPORTS_KEY
+        },
         params: {
-          client: "rugbyanthem",
-          authkey: process.env.DSG_AUTH_KEY,
-          date: "2026-02-05"
+          last: 10
         }
       }
     );
@@ -72,6 +79,56 @@ router.get("/test-dsg", async (req, res) => {
     res.json(response.data);
 
   } catch (error) {
+
+    console.error("Match fetch error:");
+
+    if (error.response) {
+      console.error(error.response.data);
+    } else {
+      console.error(error.message);
+    }
+
+    res.status(500).json({
+      error: "Failed to fetch match data"
+    });
+
+  }
+
+});
+
+
+/*
+=====================================
+TEST DSG MATCHES
+=====================================
+*/
+
+router.get("/test-dsg", async (req, res) => {
+
+  try {
+
+    const response = await axios.get(
+      `${DSG_BASE_URL}/${DSG_CLIENT}/rugby/get_matches`,
+      {
+        params: {
+          client: DSG_CLIENT,
+          authkey: DSG_AUTH_KEY,
+          type: "match"
+        }
+      }
+    );
+
+    res.json(response.data);
+
+  } catch (error) {
+
+    console.error("DSG request error:");
+
+    if (error.response) {
+      console.error(error.response.data);
+    } else {
+      console.error(error.message);
+    }
 
     res.status(500).json({
       error: "DSG request failed",
@@ -82,5 +139,6 @@ router.get("/test-dsg", async (req, res) => {
   }
 
 });
+
 
 module.exports = router;
