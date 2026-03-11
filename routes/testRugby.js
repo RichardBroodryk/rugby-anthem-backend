@@ -9,14 +9,16 @@ CONFIG
 =====================================
 */
 
-const DSG_BASE_URL = "https://dsg-api.com/clients";
+const API_SPORTS_KEY = process.env.API_SPORTS_KEY;
+
 const DSG_CLIENT = "rugbyanthem";
 const DSG_AUTH_KEY = process.env.DSG_AUTH_KEY;
 
+const DSG_BASE_URL = "https://dsg-api.com/clients";
 
 /*
 =====================================
-TEST API SPORTS CONNECTION
+TEST API-SPORTS CONNECTION
 =====================================
 */
 
@@ -28,7 +30,7 @@ router.get("/test-rugby", async (req, res) => {
       "https://v1.rugby.api-sports.io/leagues",
       {
         headers: {
-          "x-apisports-key": process.env.API_SPORTS_KEY
+          "x-apisports-key": API_SPORTS_KEY
         }
       }
     );
@@ -56,7 +58,7 @@ router.get("/test-rugby", async (req, res) => {
 
 /*
 =====================================
-TEST API SPORTS MATCHES
+TEST API-SPORTS MATCHES
 =====================================
 */
 
@@ -68,7 +70,7 @@ router.get("/matches", async (req, res) => {
       "https://v1.rugby.api-sports.io/games",
       {
         headers: {
-          "x-apisports-key": process.env.API_SPORTS_KEY
+          "x-apisports-key": API_SPORTS_KEY
         },
         params: {
           last: 10
@@ -99,7 +101,7 @@ router.get("/matches", async (req, res) => {
 
 /*
 =====================================
-TEST DSG MATCHES
+TEST DSG MATCH (KNOWN WORKING EXAMPLE)
 =====================================
 */
 
@@ -111,9 +113,10 @@ router.get("/test-dsg", async (req, res) => {
       `${DSG_BASE_URL}/${DSG_CLIENT}/rugby/get_matches`,
       {
         params: {
+          type: "match",
+          id: "3748401",
           client: DSG_CLIENT,
-          authkey: DSG_AUTH_KEY,
-          type: "match"
+          authkey: DSG_AUTH_KEY
         }
       }
     );
