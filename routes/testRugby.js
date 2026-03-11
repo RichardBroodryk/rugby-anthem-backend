@@ -18,7 +18,7 @@ const DSG_AUTH_KEY = process.env.DSG_AUTH_KEY;
 
 /*
 =====================================
-API SPORTS TEST
+TEST API SPORTS
 =====================================
 */
 
@@ -51,7 +51,7 @@ router.get("/test-rugby", async (req, res) => {
 
 /*
 =====================================
-DSG DEBUG ENDPOINT
+TEST DSG MATCHES
 =====================================
 */
 
@@ -60,7 +60,7 @@ router.get("/test-dsg", async (req, res) => {
   try {
 
     const response = await axios.get(
-      `${DSG_BASE_URL}/rugby/get_matches`,
+      `${DSG_BASE_URL}/rugby/get_matches/106`,
       {
         params: {
           username: DSG_USERNAME,
@@ -70,16 +70,12 @@ router.get("/test-dsg", async (req, res) => {
       }
     );
 
-    res.json({
-      success: true,
-      data: response.data
-    });
+    res.json(response.data);
 
   } catch (error) {
 
     res.status(500).json({
-      success: false,
-      message: "DSG request failed",
+      error: "DSG request failed",
       axiosError: error.message,
       dsgResponse: error.response ? error.response.data : null
     });
