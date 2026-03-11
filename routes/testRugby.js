@@ -4,22 +4,21 @@ const axios = require("axios");
 const router = express.Router();
 
 /*
-=====================================
+==============================
 CONFIG
-=====================================
+==============================
 */
 
-const DSG_BASE_URL = "https://dsg-api.com";
+const DSG_BASE_URL = "https://dsg-api.com/clients";
 
-const DSG_USERNAME = process.env.DSG_USERNAME;
-const DSG_PASSWORD = process.env.DSG_PASSWORD;
+const DSG_CLIENT = "rugbyanthem";
 const DSG_AUTH_KEY = process.env.DSG_AUTH_KEY;
 
 
 /*
-=====================================
-TEST API SPORTS
-=====================================
+==============================
+API SPORTS TEST
+==============================
 */
 
 router.get("/test-rugby", async (req, res) => {
@@ -50,9 +49,9 @@ router.get("/test-rugby", async (req, res) => {
 
 
 /*
-=====================================
-TEST DSG MATCHES
-=====================================
+==============================
+DSG MATCH TEST
+==============================
 */
 
 router.get("/test-dsg", async (req, res) => {
@@ -60,11 +59,10 @@ router.get("/test-dsg", async (req, res) => {
   try {
 
     const response = await axios.get(
-      `${DSG_BASE_URL}/rugby/get_matches/106`,
+      `${DSG_BASE_URL}/${DSG_CLIENT}/rugby/get_matches`,
       {
         params: {
-          username: DSG_USERNAME,
-          password: DSG_PASSWORD,
+          client: DSG_CLIENT,
           authkey: DSG_AUTH_KEY
         }
       }
@@ -83,6 +81,5 @@ router.get("/test-dsg", async (req, res) => {
   }
 
 });
-
 
 module.exports = router;
