@@ -107,18 +107,19 @@ TEST DSG MATCH (KNOWN WORKING EXAMPLE)
 
 router.get("/test-dsg", async (req, res) => {
 
- console.log("DSG KEY:", process.env.DSG_AUTH_KEY); 
-
   try {
 
     const response = await axios.get(
-      `${DSG_BASE_URL}/${DSG_CLIENT}/rugby/get_matches`,
+      "https://dsg-api.com/clients/rugbyanthem/rugby/get_matches",
       {
         params: {
           type: "match",
           id: "3748401",
-          client: DSG_CLIENT,
-          authkey: DSG_AUTH_KEY
+          client: "rugbyanthem",
+          authkey: process.env.DSG_AUTH_KEY
+        },
+        headers: {
+          "Accept": "application/json"
         }
       }
     );
@@ -127,23 +128,16 @@ router.get("/test-dsg", async (req, res) => {
 
   } catch (error) {
 
-    console.error("DSG request error:");
-
-    if (error.response) {
-      console.error(error.response.data);
-    } else {
-      console.error(error.message);
-    }
+    console.error("DSG ERROR:", error.response?.data || error.message);
 
     res.status(500).json({
       error: "DSG request failed",
       axiosError: error.message,
-      dsgResponse: error.response ? error.response.data : null
+      dsgStatus: error.response?.status,
+      dsgResponse: error.response?.data
     });
 
   }
 
 });
-
-
 module.exports = router;
