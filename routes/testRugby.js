@@ -59,11 +59,12 @@ router.get("/test-dsg", async (req, res) => {
   try {
 
     const response = await axios.get(
-      `${DSG_BASE_URL}/${DSG_CLIENT}/rugby/get_matches`,
+      "https://dsg-api.com/clients/rugbyanthem/rugby/get_matches_day",
       {
         params: {
-          client: DSG_CLIENT,
-          authkey: DSG_AUTH_KEY
+          client: "rugbyanthem",
+          authkey: process.env.DSG_AUTH_KEY,
+          date: "2026-02-05"
         }
       }
     );
