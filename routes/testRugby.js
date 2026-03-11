@@ -107,6 +107,8 @@ TEST DSG MATCH (KNOWN WORKING EXAMPLE)
 
 router.get("/test-dsg", async (req, res) => {
 
+ console.log("DSG KEY:", process.env.DSG_AUTH_KEY); 
+
   try {
 
     const response = await axios.get(
