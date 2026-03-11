@@ -11,7 +11,8 @@ API CONFIG
 
 const DSG_BASE_URL = "https://dsg-api.com";
 
-const DSG_AUTH_KEY = process.env.DSG_AUTH_KEY;
+const DSG_USERNAME = process.env.DSG_USERNAME;
+const DSG_PASSWORD = process.env.DSG_PASSWORD;
 
 
 /*
@@ -111,7 +112,8 @@ router.get("/test-dsg", async (req, res) => {
       `${DSG_BASE_URL}/rugby/get_matches`,
       {
         params: {
-          authkey: DSG_AUTH_KEY
+          username: DSG_USERNAME,
+          password: DSG_PASSWORD
         }
       }
     );
