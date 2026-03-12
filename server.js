@@ -19,18 +19,25 @@ console.log("API SPORTS KEY:", process.env.API_SPORTS_KEY);
 
 
 // ================= CORS =================
+const allowedOrigins = [
+  "https://www.rugbyanthemzone.com",
+  "https://rugbyanthemzone.com",
+  "https://rugby-anthem-frontend.vercel.app",
+  "http://localhost:3000"
+];
+
 const corsOptions = {
-  origin: [
-    "https://www.rugbyanthemzone.com",
-    "https://rugbyanthemzone.com",
-    "https://rugby-anthem-frontend-production.up.railway.app",
-    "http://localhost:3000"
-  ],
+  origin: function(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("CORS not allowed"));
+    }
+  },
   methods: ["GET","POST","PUT","DELETE","OPTIONS"],
   allowedHeaders: ["Content-Type","Authorization"],
   credentials: true
 };
-app.use(cors(corsOptions));
 
 
 // ================= BODY PARSER =================
