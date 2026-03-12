@@ -39,6 +39,9 @@ const corsOptions = {
   credentials: true
 };
 
+// ✅ ACTIVATE CORS
+app.use(cors(corsOptions));
+
 
 // ================= BODY PARSER =================
 app.use(express.json());
@@ -93,43 +96,45 @@ function authMiddleware(req,res,next){
 
 }
 
-
 // ================= REGISTER =================
-app.post("/api/register", async(req,res)=>{
+app.post("/api/register", async (req, res) => {
 
-  const {email,password} = req.body || {};
+  const { email, password } = req.body || {};
 
-  if(!email || !password){
-    return res.status(400).json({error:"Email and password required"});
+  if (!email || !password) {
+    return res.status(400).json({ error: "Email and password required" });
   }
 
-  try{
+  try {
 
-    const hashed = await bcrypt.hash(password,10);
+    const hashed = await bcrypt.hash(password, 10);
 
     const result = await pool.query(
       "INSERT INTO users (email,password_hash) VALUES ($1,$2) RETURNING id,email",
-      [email,hashed]
+      [email, hashed]
     );
 
-    res.json({
-      userId:result.rows[0].id,
-      email:result.rows[0].email
-    });
-
-  }catch(err){
-
-    console.error("Register error:",err);
-
-    if(err.code === "23505"){
-      return res.status(400).json({error:"User already exists"});
+    if (!result.rows || result.rows.length === 0) {
+      return res.status(500).json({ error: "User insert failed" });
     }
 
-    res.status(500).json({error:"Registration failed"});
+    res.json({
+      userId: result.rows[0].id,
+      email: result.rows[0].email
+    });
+
+  } catch (err) {
+
+    console.error("Register error:", err.message);
+
+    if (err.code === "23505") {
+      return res.status(400).json({ error: "User already exists" });
+    }
+
+    res.status(500).json({ error: err.message });
   }
 
 });
-
 
 // ================= LOGIN =================
 app.post("/api/login", async(req,res)=>{
