@@ -1,17 +1,17 @@
 // =====================================================
-// Ozow Payment Service (Placeholder)
+// 2Checkout Payment Service (Placeholder)
 // =====================================================
 
 async function createCheckout({ tier, email, userId }) {
 
-  console.log("🏦 Ozow checkout requested:", {
+  console.log("🌍 2Checkout checkout requested:", {
     tier,
     email,
     userId
   });
 
   return {
-    message: "Ozow integration coming soon"
+    message: "2Checkout integration coming soon"
   };
 
 }

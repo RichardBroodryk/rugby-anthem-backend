@@ -1,17 +1,17 @@
 // =====================================================
-// Ozow Payment Service (Placeholder)
+// PayFast Payment Service (Placeholder)
 // =====================================================
 
 async function createCheckout({ tier, email, userId }) {
 
-  console.log("🏦 Ozow checkout requested:", {
+  console.log("🏦 PayFast checkout requested:", {
     tier,
     email,
     userId
   });
 
   return {
-    message: "Ozow integration coming soon"
+    message: "PayFast integration coming soon"
   };
 
 }
