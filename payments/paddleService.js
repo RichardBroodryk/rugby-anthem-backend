@@ -12,11 +12,12 @@ const FRONTEND_URL = process.env.FRONTEND_URL;
 
 
 
-async function createCheckout({ tier, email }) {
+async function createCheckout({ tier, email, userId }) {
 
   console.log("🧾 Paddle checkout request:", {
     tier,
-    email
+    email,
+    userId
   });
 
   let priceId;
@@ -45,8 +46,10 @@ async function createCheckout({ tier, email }) {
           email: email
         },
 
+        // IMPORTANT: send metadata for webhook
         custom_data: {
-          tier: tier
+          tier: tier,
+          user_id: userId
         }
 
       },
