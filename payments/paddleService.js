@@ -1,6 +1,5 @@
 // =====================================================
 // Paddle Payment Service
-// Rugby Anthem Zone
 // =====================================================
 
 const axios = require("axios");
@@ -31,19 +30,16 @@ async function createCheckout({ tier, email, userId }) {
 
   if (tier === "premium") {
     priceId = PREMIUM_PRICE_ID;
-  } 
+  }
   else if (tier === "super") {
     priceId = SUPER_PRICE_ID;
-  } 
+  }
   else {
     throw new Error("Invalid tier");
   }
 
-  try {
 
-    // =====================================================
-    // CREATE TRANSACTION
-    // =====================================================
+  try {
 
     const paddleRes = await axios.post(
       "https://api.paddle.com/transactions",
@@ -60,19 +56,9 @@ async function createCheckout({ tier, email, userId }) {
           email: email
         },
 
-        // IMPORTANT → required for hosted checkout
-        collection_mode: "automatic",
-
-        // metadata for webhook
         custom_data: {
           tier: tier,
           user_id: userId
-        },
-
-        // return URLs
-        checkout: {
-          success_url: `${FRONTEND_URL}/payment-success`,
-          cancel_url: `${FRONTEND_URL}/payment-cancel`
         }
 
       },
@@ -99,21 +85,24 @@ async function createCheckout({ tier, email, userId }) {
     }
 
 
-    const checkoutUrl = transaction.checkout?.url;
+    const transactionId = transaction.id;
 
-    if (!checkoutUrl) {
+    if (!transactionId) {
 
       console.error(
-        "❌ Paddle response missing checkout URL:",
+        "❌ Paddle response missing transaction ID:",
         paddleRes?.data
       );
 
-      throw new Error("Checkout URL missing");
+      throw new Error("Transaction ID missing");
 
     }
 
 
-    console.log("✅ Paddle checkout URL:", checkoutUrl);
+    console.log("✅ Paddle transaction created:", transactionId);
+
+
+    const checkoutUrl = `https://checkout.paddle.com/transaction/${transactionId}`;
 
 
     return {
@@ -139,10 +128,6 @@ async function createCheckout({ tier, email, userId }) {
 }
 
 
-
-// =====================================================
-// EXPORT
-// =====================================================
 
 module.exports = {
   createCheckout
