@@ -7,7 +7,7 @@ const router = express.Router();
 
 const paymentRouter = require("../payments/paymentRouter");
 
-router.post("/create-checkout", async (req, res) => {
+router.post("/", async (req, res) => {
 
   try {
 
@@ -30,7 +30,6 @@ router.post("/create-checkout", async (req, res) => {
       return res.status(400).json({ error: "User ID missing in token" });
     }
 
-    // Current provider
     const provider = "paddle";
 
     const result = await paymentRouter.createCheckout({
