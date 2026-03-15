@@ -46,10 +46,15 @@ async function createCheckout({ tier, email, userId }) {
           email: email
         },
 
-        // IMPORTANT: send metadata for webhook
         custom_data: {
           tier: tier,
           user_id: userId
+        },
+
+        // where user returns after payment
+        checkout: {
+          success_url: `${FRONTEND_URL}/payment-success`,
+          cancel_url: `${FRONTEND_URL}/payment-cancel`
         }
 
       },
@@ -61,22 +66,33 @@ async function createCheckout({ tier, email, userId }) {
       }
     );
 
-    const transactionId = paddleRes?.data?.data?.id;
+    const transaction = paddleRes?.data?.data;
 
-    if (!transactionId) {
+    if (!transaction) {
 
       console.error(
-        "❌ Paddle response missing transaction ID:",
+        "❌ Paddle response missing transaction:",
         paddleRes?.data
       );
 
-      throw new Error("Transaction ID missing");
+      throw new Error("Transaction data missing");
 
     }
 
-    console.log("✅ Paddle transaction created:", transactionId);
+    const checkoutUrl = transaction.checkout?.url;
 
-    const checkoutUrl = `https://checkout.paddle.com/transaction/${transactionId}`;
+    if (!checkoutUrl) {
+
+      console.error(
+        "❌ Paddle response missing checkout URL:",
+        paddleRes?.data
+      );
+
+      throw new Error("Checkout URL missing");
+
+    }
+
+    console.log("✅ Paddle checkout URL:", checkoutUrl);
 
     return {
       checkoutUrl
