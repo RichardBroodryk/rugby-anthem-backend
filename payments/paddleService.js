@@ -4,19 +4,9 @@
 
 const axios = require("axios");
 
-
-// ================= ENV =================
-
 const PADDLE_API_KEY = (process.env.PADDLE_API_KEY || "").trim();
 const PREMIUM_PRICE_ID = process.env.PADDLE_PRICE_PREMIUM;
 const SUPER_PRICE_ID = process.env.PADDLE_PRICE_SUPER;
-const FRONTEND_URL = process.env.FRONTEND_URL;
-
-
-
-// =====================================================
-// CREATE CHECKOUT
-// =====================================================
 
 async function createCheckout({ tier, email, userId }) {
 
@@ -30,21 +20,17 @@ async function createCheckout({ tier, email, userId }) {
 
   if (tier === "premium") {
     priceId = PREMIUM_PRICE_ID;
-  }
-  else if (tier === "super") {
+  } else if (tier === "super") {
     priceId = SUPER_PRICE_ID;
-  }
-  else {
+  } else {
     throw new Error("Invalid tier");
   }
-
 
   try {
 
     const paddleRes = await axios.post(
       "https://api.paddle.com/transactions",
       {
-
         items: [
           {
             price_id: priceId,
@@ -60,7 +46,6 @@ async function createCheckout({ tier, email, userId }) {
           tier: tier,
           user_id: userId
         }
-
       },
       {
         headers: {
@@ -70,64 +55,38 @@ async function createCheckout({ tier, email, userId }) {
       }
     );
 
-
     const transaction = paddleRes?.data?.data;
 
     if (!transaction) {
-
-      console.error(
-        "❌ Paddle response missing transaction:",
-        paddleRes?.data
-      );
-
       throw new Error("Transaction data missing");
-
     }
 
+    const checkoutUrl = transaction?.checkout?.url;
 
-    const transactionId = transaction.id;
-
-    if (!transactionId) {
-
-      console.error(
-        "❌ Paddle response missing transaction ID:",
-        paddleRes?.data
-      );
-
-      throw new Error("Transaction ID missing");
-
+    if (!checkoutUrl) {
+      console.error("Paddle response:", paddleRes.data);
+      throw new Error("Checkout URL missing from Paddle response");
     }
 
-
-    console.log("✅ Paddle transaction created:", transactionId);
-
-
-    const checkoutUrl = `https://checkout.paddle.com/transaction/${transactionId}`;
-
+    console.log("✅ Paddle checkout URL:", checkoutUrl);
 
     return {
       checkoutUrl
     };
 
-
   } catch (err) {
 
-    console.error("❌ PADDLE API ERROR");
+    console.error("❌ Paddle API error");
 
     if (err.response) {
-      console.error("Status:", err.response.status);
-      console.error("Data:", err.response.data);
+      console.error(err.response.data);
     } else {
-      console.error("Message:", err.message);
+      console.error(err.message);
     }
 
     throw new Error("Paddle transaction creation failed");
-
   }
-
 }
-
-
 
 module.exports = {
   createCheckout
