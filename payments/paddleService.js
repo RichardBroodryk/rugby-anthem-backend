@@ -1,16 +1,23 @@
 // =====================================================
 // Paddle Payment Service
+// Rugby Anthem Zone
 // =====================================================
 
 const axios = require("axios");
 
-// ENV
+
+// ================= ENV =================
+
 const PADDLE_API_KEY = (process.env.PADDLE_API_KEY || "").trim();
 const PREMIUM_PRICE_ID = process.env.PADDLE_PRICE_PREMIUM;
 const SUPER_PRICE_ID = process.env.PADDLE_PRICE_SUPER;
 const FRONTEND_URL = process.env.FRONTEND_URL;
 
 
+
+// =====================================================
+// CREATE CHECKOUT
+// =====================================================
 
 async function createCheckout({ tier, email, userId }) {
 
@@ -24,17 +31,24 @@ async function createCheckout({ tier, email, userId }) {
 
   if (tier === "premium") {
     priceId = PREMIUM_PRICE_ID;
-  } else if (tier === "super") {
+  } 
+  else if (tier === "super") {
     priceId = SUPER_PRICE_ID;
-  } else {
+  } 
+  else {
     throw new Error("Invalid tier");
   }
 
   try {
 
+    // =====================================================
+    // CREATE TRANSACTION
+    // =====================================================
+
     const paddleRes = await axios.post(
       "https://api.paddle.com/transactions",
       {
+
         items: [
           {
             price_id: priceId,
@@ -46,12 +60,16 @@ async function createCheckout({ tier, email, userId }) {
           email: email
         },
 
+        // IMPORTANT → required for hosted checkout
+        collection_mode: "automatic",
+
+        // metadata for webhook
         custom_data: {
           tier: tier,
           user_id: userId
         },
 
-        // where user returns after payment
+        // return URLs
         checkout: {
           success_url: `${FRONTEND_URL}/payment-success`,
           cancel_url: `${FRONTEND_URL}/payment-cancel`
@@ -66,6 +84,7 @@ async function createCheckout({ tier, email, userId }) {
       }
     );
 
+
     const transaction = paddleRes?.data?.data;
 
     if (!transaction) {
@@ -78,6 +97,7 @@ async function createCheckout({ tier, email, userId }) {
       throw new Error("Transaction data missing");
 
     }
+
 
     const checkoutUrl = transaction.checkout?.url;
 
@@ -92,11 +112,14 @@ async function createCheckout({ tier, email, userId }) {
 
     }
 
+
     console.log("✅ Paddle checkout URL:", checkoutUrl);
+
 
     return {
       checkoutUrl
     };
+
 
   } catch (err) {
 
@@ -116,6 +139,10 @@ async function createCheckout({ tier, email, userId }) {
 }
 
 
+
+// =====================================================
+// EXPORT
+// =====================================================
 
 module.exports = {
   createCheckout
