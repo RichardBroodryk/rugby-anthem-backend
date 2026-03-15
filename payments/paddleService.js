@@ -76,7 +76,7 @@ async function createCheckout({ tier, email, userId }) {
 
     console.log("✅ Paddle transaction created:", transactionId);
 
-    const checkoutUrl = `${FRONTEND_URL}/terms?_ptxn=${transactionId}`;
+    const checkoutUrl = `https://checkout.paddle.com/transaction/${transactionId}`;
 
     return {
       checkoutUrl
