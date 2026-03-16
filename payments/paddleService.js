@@ -42,6 +42,8 @@ async function createCheckout({ tier, email, userId }) {
           email: email
         },
 
+        collection_mode: "automatic",
+
         custom_data: {
           tier: tier,
           user_id: userId
@@ -54,6 +56,8 @@ async function createCheckout({ tier, email, userId }) {
         }
       }
     );
+
+console.log("PADDLE FULL RESPONSE:", JSON.stringify(paddleRes.data, null, 2));
 
     const transaction = paddleRes?.data?.data;
 
