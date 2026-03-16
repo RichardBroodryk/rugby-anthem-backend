@@ -18,23 +18,23 @@ async function createCheckout({ provider, tier, email, userId }) {
         userId
       });
 
-    // ================= 2CHECKOUT =================
-    case "2checkout":
-
-      const twoCheckoutService = require("./twoCheckoutService");
-
-      return twoCheckoutService.createCheckout({
-        tier,
-        email,
-        userId
-      });
-
     // ================= PAYFAST =================
     case "payfast":
 
       const payfastService = require("./payfastService");
 
       return payfastService.createCheckout({
+        tier,
+        email,
+        userId
+      });
+
+    // ================= FASTSPRING =================
+    case "fastspring":
+
+      const fastspringService = require("./fastspringService");
+
+      return fastspringService.createCheckout({
         tier,
         email,
         userId

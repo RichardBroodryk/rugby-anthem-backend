@@ -63,8 +63,8 @@ async function createCheckout({ tier, email, userId }) {
 
         // Important: define checkout context
         checkout: {
-          url: `${FRONTEND_URL}/checkout`
-        },
+  url: "https://rugbyanthemzone.com/checkout"
+},
 
         custom_data: {
           tier: tier,
