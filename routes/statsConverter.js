@@ -16,13 +16,13 @@ function convertApiSportsGame(game) {
 
     id: g.id || null,
 
-    tournament: g.league?.name || "Six Nations",
+    tournament: g.league?.name || "International Test",
 
     date: g.date
       ? g.date.substring(0, 10)
       : "",
 
-    venue: g.fixture?.venue?.name || "TBC",
+    venue: g.fixture?.venue || "TBC",
 
     home: {
       name: home.name || "",
@@ -70,6 +70,7 @@ function normalizeCountry(teamName) {
     "South Africa": "south-africa",
     "New Zealand": "new-zealand",
     "Australia": "australia",
+    "Argentina": "argentina",
     "Japan": "japan",
     "Fiji": "fiji"
 

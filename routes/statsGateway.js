@@ -5,264 +5,143 @@ const router = express.Router();
 
 /*
 ========================================
-DSG CONFIG
-========================================
-*/
-
-const DSG_BASE_URL = "https://dsg-api.com";
-
-const DSG_AUTH_KEY = process.env.DSG_AUTH_KEY;
-
-/*
-========================================
-COMPETITION CONFIG
-========================================
-*/
-
-const COMPETITION = {
-  league: 51,
-  season: 2026
-};
-
-/*
-========================================
-CACHE SYSTEM
-========================================
-*/
-
-const CACHE_DURATION = 60 * 1000;
-
-let fixturesCache = null;
-let fixturesLastFetch = 0;
-
-let standingsCache = null;
-let standingsLastFetch = 0;
-
-/*
-========================================
 COUNTRY NORMALIZER
 ========================================
 */
 
 function normalizeCountry(name) {
-
   if (!name) return "unknown";
-
-  return name
-    .toLowerCase()
-    .replace(/\s/g, "-");
-
+  return name.toLowerCase().replace(/\s/g, "-");
 }
 
 /*
 ========================================
-DSG MATCH CONVERTER
+MATCH CONVERTER (FRONTEND FORMAT)
 ========================================
 */
 
-function convertMatch(match) {
-
+function convertMatch(game) {
   return {
+    id: game.id || null,
 
-    id: match.id,
+    tournament: game.league?.name || "International Test",
 
-    tournament: match.competition?.name || "International",
+    date: game.date ? game.date.split("T")[0] : "",
 
-    date: match.startTime?.split("T")[0],
-
-    venue: match.venue?.name || "TBC",
+    venue: game.venue?.name || "TBC",
 
     home: {
-      name: match.homeTeam?.name,
-      country: normalizeCountry(match.homeTeam?.name)
+      name: game.teams?.home?.name || "",
+      country: normalizeCountry(game.teams?.home?.name)
     },
 
     away: {
-      name: match.awayTeam?.name,
-      country: normalizeCountry(match.awayTeam?.name)
+      name: game.teams?.away?.name || "",
+      country: normalizeCountry(game.teams?.away?.name)
     },
 
     score: {
-      home: match.homeScore ?? null,
-      away: match.awayScore ?? null
+      home: game.scores?.home ?? null,
+      away: game.scores?.away ?? null
     }
-
   };
-
 }
 
-function convertFixtures(matches) {
-
-  if (!Array.isArray(matches)) return [];
-
-  return matches.map(convertMatch);
-
+function convertFixtures(fixtures) {
+  if (!Array.isArray(fixtures)) return [];
+  return fixtures.map(convertMatch);
 }
 
 /*
 ========================================
-FIXTURES
-/api/stats/fixtures
+FETCH MATCHES (LIVE DATA)
 ========================================
 */
 
-router.get("/fixtures", async (req, res) => {
+async function fetchMatches() {
 
-  const now = Date.now();
-
-  if (fixturesCache && now - fixturesLastFetch < CACHE_DURATION) {
-    return res.json(fixturesCache);
-  }
+  const today = new Date().toISOString().split("T")[0];
 
   try {
 
     const response = await axios.get(
-      `${DSG_BASE_URL}/fixtures`,
+      "https://v1.rugby.api-sports.io/games",
       {
+        params: {
+          date: today,
+          timezone: "Africa/Johannesburg"
+        },
         headers: {
-          Authorization: DSG_AUTH_KEY
+          "x-apisports-key": process.env.API_SPORTS_KEY
         }
       }
     );
 
-    const converted = convertFixtures(response.data);
+    const data = response.data?.response || [];
 
-    fixturesCache = converted;
-    fixturesLastFetch = now;
+    // Prefer internationals if available
+    const internationals = data.filter(match =>
+      match.league?.name?.toLowerCase().includes("international") ||
+      match.league?.name?.toLowerCase().includes("six nations") ||
+      match.league?.name?.toLowerCase().includes("world cup")
+    );
+
+    return internationals.length > 0 ? internationals : data;
+
+  } catch (err) {
+
+    console.error("API-SPORTS FETCH ERROR:", err.message);
+
+    return [];
+
+  }
+
+}
+
+/*
+========================================
+MATCHES
+========================================
+*/
+
+router.get("/matches", async (req, res) => {
+
+  try {
+
+    const data = await fetchMatches();
+    const converted = convertFixtures(data);
 
     res.json(converted);
 
   } catch (error) {
 
-    console.error("DSG Fixtures fetch error");
+    res.status(500).json({
+      error: "Failed to fetch matches"
+    });
 
-    if (error.response) {
-      console.error(error.response.data);
-    } else {
-      console.error(error.message);
-    }
+  }
+
+});
+
+/*
+========================================
+FIXTURES (ALIAS)
+========================================
+*/
+
+router.get("/fixtures", async (req, res) => {
+
+  try {
+
+    const data = await fetchMatches();
+    const converted = convertFixtures(data);
+
+    res.json(converted);
+
+  } catch (error) {
 
     res.status(500).json({
       error: "Failed to fetch fixtures"
-    });
-
-  }
-
-});
-
-/*
-========================================
-STANDINGS
-/api/stats/standings
-========================================
-*/
-
-router.get("/standings", async (req, res) => {
-
-  const now = Date.now();
-
-  if (standingsCache && now - standingsLastFetch < CACHE_DURATION) {
-    return res.json(standingsCache);
-  }
-
-  try {
-
-    const response = await axios.get(
-      `${DSG_BASE_URL}/standings`,
-      {
-        headers: {
-          Authorization: DSG_AUTH_KEY
-        }
-      }
-    );
-
-    const rows = response.data?.standings || [];
-
-    const standings = rows.map((row) => ({
-
-      team: row.team?.name,
-
-      country: normalizeCountry(row.team?.name),
-
-      played: row.played,
-
-      won: row.won,
-
-      lost: row.lost,
-
-      pointsFor: row.pointsFor,
-
-      pointsAgainst: row.pointsAgainst,
-
-      difference: row.pointsFor - row.pointsAgainst,
-
-      points: row.points,
-
-      form: row.form || ""
-
-    }));
-
-    standingsCache = standings;
-    standingsLastFetch = now;
-
-    res.json(standings);
-
-  } catch (error) {
-
-    console.error("DSG Standings fetch error");
-
-    if (error.response) {
-      console.error(error.response.data);
-    } else {
-      console.error(error.message);
-    }
-
-    res.status(500).json({
-      error: "Failed to fetch standings"
-    });
-
-  }
-
-});
-
-/*
-========================================
-SINGLE MATCH
-/api/stats/match/:id
-========================================
-*/
-
-router.get("/match/:id", async (req, res) => {
-
-  const matchId = req.params.id;
-
-  try {
-
-    const response = await axios.get(
-      `${DSG_BASE_URL}/matches/${matchId}`,
-      {
-        headers: {
-          Authorization: DSG_AUTH_KEY
-        }
-      }
-    );
-
-    const match = convertMatch(response.data);
-
-    res.json(match);
-
-  } catch (error) {
-
-    console.error("DSG Match fetch error");
-
-    if (error.response) {
-      console.error(error.response.data);
-    } else {
-      console.error(error.message);
-    }
-
-    res.status(500).json({
-      error: "Failed to fetch match data"
     });
 
   }
