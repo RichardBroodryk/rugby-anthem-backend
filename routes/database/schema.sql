@@ -101,3 +101,11 @@ VALUES
   ('premium', 1, 'Premium'),
   ('super', 2, 'Super')
 ON CONFLICT (tier_code) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS user_loyalty (
+  id SERIAL PRIMARY KEY,
+  user_id TEXT UNIQUE,
+  points INTEGER DEFAULT 0,
+  tier TEXT DEFAULT 'bronze',
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

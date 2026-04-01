@@ -22,6 +22,8 @@ const rugbyData = require("./routes/rugbyData");
 
 const newsRoutes = require("./routes/news");
 
+const loyaltyRoutes = require("./routes/loyalty");
+
 const app = express();
 
 console.log("API SPORTS KEY:", process.env.API_SPORTS_KEY);
@@ -170,6 +172,8 @@ app.use("/api/rugby", rugbyData);
 
 // 📰 NEWS ROUTE
 app.use("/api/news", newsRoutes);
+
+app.use("/api/loyalty", loyaltyRoutes);
 
 // ================= VIDEOS ROUTE =================
 app.get("/api/videos", async (req, res) => {
