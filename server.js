@@ -20,6 +20,8 @@ const payfastNotify = require("./routes/payfastNotify");
 // 🔥 NEW — DATA CONTROL LAYER
 const rugbyData = require("./routes/rugbyData");
 
+const newsRoutes = require("./routes/news");
+
 const app = express();
 
 console.log("API SPORTS KEY:", process.env.API_SPORTS_KEY);
@@ -165,6 +167,9 @@ app.use("/api", payfastNotify);
 
 // 🔥 NEW — DATA CONTROL ROUTE
 app.use("/api/rugby", rugbyData);
+
+// 📰 NEWS ROUTE
+app.use("/api/news", newsRoutes);
 
 // ================= VIDEOS ROUTE =================
 app.get("/api/videos", async (req, res) => {
