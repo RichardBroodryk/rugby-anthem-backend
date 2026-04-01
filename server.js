@@ -166,6 +166,22 @@ app.use("/api", payfastNotify);
 // 🔥 NEW — DATA CONTROL ROUTE
 app.use("/api/rugby", rugbyData);
 
+// ================= VIDEOS ROUTE =================
+app.get("/api/videos", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT id, title, thumbnail, url, category, published_at
+      FROM videos
+      ORDER BY published_at DESC
+    `);
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Error fetching videos:", err);
+    res.status(500).json({ error: "Failed to fetch videos" });
+  }
+});
+
 // ================= START =================
 const PORT = process.env.PORT || 4000;
 
