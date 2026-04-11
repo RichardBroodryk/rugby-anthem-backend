@@ -2,13 +2,13 @@ require('dotenv').config();
 
 console.log("DATABASE_URL:", process.env.DATABASE_URL);
 
+console.log("🔥 NEW VERSION DEPLOYED");
+
 const express = require('express');
 const cors = require('cors');
 const pool = require('./db');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-
-const fetch = require("node-fetch");
 
 // ================= EXISTING ROUTES =================
 const paddleWebhook = require('./routes/paddleWebhook');
@@ -52,7 +52,12 @@ const corsOptions = {
   credentials: true
 };
 
-app.use(cors(corsOptions));
+app.use(cors({
+  origin: true,
+  credentials: true
+}));
+
+app.options("/*", cors());
 
 // ================= BODY =================
 app.use(express.json());
