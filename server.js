@@ -161,9 +161,13 @@ app.post("/api/verify-payment", async (req, res) => {
       throw new Error("Transaction not completed");
     }
 
-    const userId =
-      transaction.custom_data?.user_id ||
-      transaction.customData?.user_id;
+    const userIdRaw =
+  transaction.custom_data?.user_id ||
+  transaction.customData?.user_id;
+
+console.log("🔥 USER ID FROM PADDLE:", userIdRaw);
+
+const userId = Number(userIdRaw);
 
     if (!userId) {
       throw new Error("User ID missing from Paddle metadata");
@@ -179,10 +183,12 @@ app.post("/api/verify-payment", async (req, res) => {
       tier = "super";
     }
 
-    await pool.query(
-      `UPDATE users SET tier = $1 WHERE id = $2`,
-      [tier, userId]
-    );
+    const result = await pool.query(
+  `UPDATE users SET tier = $1 WHERE id = $2 RETURNING id, tier`,
+  [tier, userId]
+);
+
+console.log("🔥 UPDATE RESULT:", result.rows);
 
     return res.json({ success: true, tier });
 
