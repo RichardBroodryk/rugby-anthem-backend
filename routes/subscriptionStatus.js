@@ -6,9 +6,7 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../db");
 
-// 🔐 uses existing auth middleware from server.js
-
-// ✅ MAIN ROUTE (FIXED)
+// ✅ MAIN ROUTE (CACHE DISABLED — FIXED)
 router.get("/", async (req, res) => {
   try {
     const userId = req.userId;
@@ -17,28 +15,7 @@ router.get("/", async (req, res) => {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    // ================= CACHE FIRST =================
-    try {
-      const cacheRes = await pool.query(
-        `SELECT tier_code, has_premium, has_super
-         FROM user_access_cache
-         WHERE user_id = $1`,
-        [userId]
-      );
-
-      if (cacheRes.rows.length > 0) {
-        return res.json({
-          tier: cacheRes.rows[0].tier_code,
-          hasPremium: cacheRes.rows[0].has_premium,
-          hasSuper: cacheRes.rows[0].has_super,
-          source: "cache",
-        });
-      }
-    } catch (cacheErr) {
-      console.warn("Cache lookup failed, falling back:", cacheErr.message);
-    }
-
-    // ================= USERS TABLE FALLBACK =================
+    // 🔥 DIRECT USERS TABLE (SOURCE OF TRUTH)
     const userRes = await pool.query(
       `SELECT tier FROM users WHERE id = $1`,
       [userId]
@@ -59,7 +36,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-// ✅ OPTIONAL: keep backward compatibility
+// ✅ BACKWARD COMPAT
 router.get("/status", async (req, res, next) => {
   req.url = "/";
   return router.handle(req, res, next);

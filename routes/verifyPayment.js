@@ -1,74 +1,47 @@
 // =====================================================
-// Verify Payment (Paddle Return Handler)
+// Checkout Route (Payments - CREATE CHECKOUT ONLY)
 // =====================================================
 
 const express = require("express");
 const router = express.Router();
 
-const db = require("../db"); // adjust to your DB import
-const fetch = require("node-fetch");
-
-const PADDLE_API_KEY = process.env.PADDLE_API_KEY;
+const paymentRouter = require("../payments/paymentRouter");
 
 router.post("/", async (req, res) => {
   try {
-    const { txn } = req.body;
+    const { tier } = req.body;
 
-    if (!txn) {
-      return res.status(400).json({ error: "Transaction ID required" });
+    const email = req.userEmail;
+    const userId = req.userId;
+
+    console.log("🧾 Checkout request:", { tier, email, userId });
+
+    if (!tier) {
+      return res.status(400).json({ error: "Tier required" });
     }
 
-    console.log("🔍 Verifying transaction:", txn);
+    if (!email) {
+      return res.status(400).json({ error: "User email missing in token" });
+    }
 
-    // 🔴 Call Paddle API
-    const paddleRes = await fetch("https://api.paddle.com/transactions/" + txn, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${PADDLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
+    if (!userId) {
+      return res.status(400).json({ error: "User ID missing in token" });
+    }
+
+    const result = await paymentRouter.createCheckout({
+      provider: "paddle",
+      tier,
+      email,
+      userId,
     });
 
-    const data = await paddleRes.json();
-
-    if (!data || !data.data) {
-      throw new Error("Invalid Paddle response");
-    }
-
-    const transaction = data.data;
-
-    // ✅ Extract info
-    const email = transaction.customer.email;
-    const priceId = transaction.items[0].price.id;
-
-    console.log("✅ Paddle verified:", { email, priceId });
-
-    // 🔴 Map price → tier
-    let tier = "freemium";
-
-    if (priceId === process.env.PADDLE_PRICE_PREMIUM) {
-      tier = "premium";
-    }
-
-    if (priceId === process.env.PADDLE_PRICE_SUPER) {
-      tier = "super";
-    }
-
-    // 🔴 Update DB
-    await db.query(
-      `UPDATE users SET tier = $1 WHERE email = $2`,
-      [tier, email]
-    );
-
-    console.log("🔥 User upgraded:", email, tier);
-
-    return res.json({ success: true, tier });
+    return res.json(result);
 
   } catch (err) {
-    console.error("❌ Verify payment error:", err.message);
+    console.error("❌ Checkout error:", err.message);
 
     return res.status(500).json({
-      error: "Verification failed",
+      error: "Checkout failed",
       debug: err.message,
     });
   }

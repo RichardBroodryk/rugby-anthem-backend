@@ -1,56 +1,75 @@
-require('dotenv').config();
+require("dotenv").config();
 
-console.log("DATABASE_URL:", process.env.DATABASE_URL);
-console.log("🔥 NEW VERSION DEPLOYED");
+console.log("🚀 SERVER STARTING...");
+console.log("DATABASE_URL present:", !!process.env.DATABASE_URL);
+console.log("JWT_SECRET present:", !!process.env.JWT_SECRET);
+console.log("PADDLE_API_KEY present:", !!process.env.PADDLE_API_KEY);
+console.log("PADDLE_WEBHOOK_SECRET present:", !!process.env.PADDLE_WEBHOOK_SECRET);
 
-const express = require('express');
-const cors = require('cors');
-const pool = require('./db');
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
-const axios = require('axios');
+try {
+  console.log("🔌 Loading DB...");
+  const pool = require("./db");
+  console.log("✅ DB module loaded");
+} catch (err) {
+  console.error("❌ FAILED TO LOAD DB MODULE:", err.message);
+  process.exit(1);
+}
 
+// ================= IMPORTS =================
+const express = require("express");
+const cors = require("cors");
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+
+// ================= INIT =================
 const app = express();
 
-// ================= ROUTES =================
-const paddleWebhook = require('./routes/paddleWebhook');
-const subscriptionStatus = require('./routes/subscriptionStatus');
-const createCheckout = require('./routes/createCheckout');
+// ================= DB =================
+const pool = require("./db");
+console.log("✅ DB loaded");
 
-const rugbyRoutes = require("./routes/testRugby");
-const statsGateway = require("./routes/statsGateway");
-const payfastNotify = require("./routes/payfastNotify");
-const rugbyData = require("./routes/rugbyData");
-const newsRoutes = require("./routes/news");
-const loyaltyRoutes = require("./routes/loyalty");
+// ================= CORS =================
+app.use(
+  cors({
+    origin: [
+      "https://www.rugbyanthemzone.com",
+      "https://rugbyanthemzone.com",
+    ],
+    credentials: true,
+  })
+);
+
+// Safe OPTIONS handler
+app.use((req, res, next) => {
+  if (req.method === "OPTIONS") {
+    res.setHeader("Access-Control-Allow-Origin", "https://www.rugbyanthemzone.com");
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    return res.sendStatus(200);
+  }
+  next();
+});
 
 // ================= MIDDLEWARE =================
-app.use(cors({ origin: true, credentials: true }));
-app.use(express.json());
+// 🔥 MUST BE FIRST — raw body for Paddle webhook
+app.use("/api/webhooks/paddle", express.raw({ type: "*/*" }));
 
-// ================= HEALTH =================
-app.get("/", (req, res) => {
-  res.send("Rugby Anthem Zone backend is running");
-});
+// JSON for all other routes
+app.use(express.json());
 
 // ================= JWT =================
 const JWT_SECRET = (process.env.JWT_SECRET || "").trim();
-
 if (!JWT_SECRET) {
-  throw new Error("JWT_SECRET missing from environment");
+  console.error("❌ JWT_SECRET missing");
+  process.exit(1);
 }
 
 // ================= AUTH MIDDLEWARE =================
 function authMiddleware(req, res, next) {
   try {
-    let header = req.headers.authorization;
-
-    if (!header || typeof header !== "string") {
+    const header = req.headers.authorization;
+    if (!header || !header.toLowerCase().startsWith("bearer ")) {
       return res.status(401).json({ error: "No token" });
-    }
-
-    if (!header.toLowerCase().startsWith("bearer ")) {
-      return res.status(401).json({ error: "Invalid token format" });
     }
 
     const token = header.slice(7).trim();
@@ -60,15 +79,27 @@ function authMiddleware(req, res, next) {
     req.userEmail = decoded.email;
 
     next();
-
   } catch (err) {
     return res.status(401).json({ error: "Invalid token" });
   }
 }
 
+// ================= ROUTE IMPORTS =================
+const subscriptionStatus = require("./routes/subscriptionStatus");
+const createCheckout = require("./routes/createCheckout");
+const paddleWebhook = require("./routes/paddleWebhook");
+
+const rugbyRoutes = require("./routes/testRugby");
+const statsGateway = require("./routes/statsGateway");
+const payfastNotify = require("./routes/payfastNotify");
+const rugbyData = require("./routes/rugbyData");
+const newsRoutes = require("./routes/news");
+const loyaltyRoutes = require("./routes/loyalty");
+
+console.log("✅ All routes loaded");
+
 // ================= AUTH ROUTES =================
 
-// ✅ REGISTER
 app.post("/api/register", async (req, res) => {
   const { email, password } = req.body || {};
 
@@ -77,145 +108,81 @@ app.post("/api/register", async (req, res) => {
   }
 
   try {
+    const normalizedEmail = email.toLowerCase();
     const hashed = await bcrypt.hash(password, 10);
 
     const result = await pool.query(
-      "INSERT INTO users (email,password_hash) VALUES ($1,$2) RETURNING id,email",
-      [email, hashed]
+      `INSERT INTO users (email, password_hash, tier, is_active, auth_provider) 
+       VALUES ($1, $2, $3, $4, $5) 
+       RETURNING id, email, tier`,
+      [normalizedEmail, hashed, 'freemium', true, 'email']
     );
 
-    res.json({
-      userId: result.rows[0].id,
-      email: result.rows[0].email
-    });
+    const newUser = result.rows[0];
 
-  } catch (err) {
-    if (err.code === "23505") {
-      return res.status(400).json({ error: "User already exists" });
-    }
+    console.log("✅ New user created successfully - ID:", newUser.id);
 
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ✅ LOGIN (🔥 RESTORED)
-app.post("/api/login", async (req, res) => {
-  const { email, password } = req.body;
-
-  try {
-    const result = await pool.query(
-      "SELECT id,email,password_hash FROM users WHERE email=$1",
-      [email]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
-
-    const user = result.rows[0];
-    const valid = await bcrypt.compare(password, user.password_hash);
-
-    if (!valid) {
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
-
+    // 🔥 THIS IS THE MISSING PIECE
     const token = jwt.sign(
-      { userId: String(user.id), email: String(user.email) },
+      {
+        userId: String(newUser.id),   // MUST match authMiddleware
+        email: newUser.email
+      },
       JWT_SECRET,
       { expiresIn: "7d" }
     );
 
-    res.json({ token });
-
-  } catch {
-    res.status(500).json({ error: "Login failed" });
-  }
-});
-
-// ================= VERIFY PAYMENT =================
-app.post("/api/verify-payment", async (req, res) => {
-  try {
-    const { txn } = req.body;
-
-    if (!txn) {
-      return res.status(400).json({ error: "Transaction ID required" });
-    }
-
-    const paddleRes = await axios.get(
-      `https://api.paddle.com/transactions/${txn}`,
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.PADDLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-
-    const transaction = paddleRes.data?.data;
-
-    if (!transaction) {
-      throw new Error("Invalid Paddle response");
-    }
-
-    if (transaction.status !== "completed") {
-      throw new Error("Transaction not completed");
-    }
-
-    const userIdRaw =
-  transaction.custom_data?.user_id ||
-  transaction.customData?.user_id;
-
-console.log("🔥 USER ID FROM PADDLE:", userIdRaw);
-
-const userId = Number(userIdRaw);
-
-    if (!userId) {
-      throw new Error("User ID missing from Paddle metadata");
-    }
-
-    let tier = "premium";
-
-    const priceId =
-      transaction.items?.[0]?.price?.id ||
-      transaction.items?.[0]?.price_id;
-
-    if (priceId === process.env.PADDLE_PRICE_SUPER) {
-      tier = "super";
-    }
-
-    const result = await pool.query(
-  `UPDATE users SET tier = $1 WHERE id = $2 RETURNING id, tier`,
-  [tier, userId]
-);
-
-console.log("🔥 UPDATE RESULT:", result.rows);
-
-    return res.json({ success: true, tier });
+    res.json({
+      token,                        // 🔥 ADD THIS
+      userId: newUser.id,
+      email: newUser.email,
+      tier: newUser.tier,
+    });
 
   } catch (err) {
-    return res.status(500).json({
-      error: "Verification failed",
-      debug: err.message
-    });
+    console.error("❌ REGISTER ERROR:", err.message);
+
+    if (err.code === "23505") {
+      return res.status(400).json({ error: "User already exists" });
+    }
+
+    res.status(500).json({ error: "Registration failed", debug: err.message });
   }
 });
+
+// ================= CORE ROUTES =================
+app.use("/api/webhooks/paddle", paddleWebhook);
+app.use("/api/subscription", authMiddleware, subscriptionStatus);
+app.use("/api/payments", authMiddleware, createCheckout);
 
 // ================= OTHER ROUTES =================
 app.use("/api", rugbyRoutes);
 app.use("/api/stats", statsGateway);
-app.use("/api/webhooks/paddle", paddleWebhook);
-
-app.use("/api/subscription", authMiddleware, subscriptionStatus);
-app.use("/api/payments", authMiddleware, createCheckout);
-
 app.use("/api", payfastNotify);
 app.use("/api/rugby", rugbyData);
 app.use("/api/news", newsRoutes);
 app.use("/api/loyalty", loyaltyRoutes);
 
-// ================= START =================
+// ================= HEALTH CHECK (good for Fly) =================
+app.get("/health", (req, res) => {
+  res.json({ 
+    status: "ok", 
+    time: new Date().toISOString(),
+    message: "Rugby Anthem Zone backend is running"
+  });
+});
+
+app.get("/", (req, res) => {
+  res.send("Rugby Anthem Zone backend is running");
+});
+
+// ================= START SERVER =================
+// ================= START SERVER =================
 const PORT = process.env.PORT || 4000;
 
-app.listen(PORT, () => {
-  console.log("Server running on port", PORT);
+console.log("🚀 USING PORT:", PORT);
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`✅ Listening on 0.0.0.0:${PORT} - ready for Fly proxy`);
 });
