@@ -86,6 +86,7 @@ function authMiddleware(req, res, next) {
 
 // ================= ROUTE IMPORTS =================
 const subscriptionStatus = require("./routes/subscriptionStatus");
+const subscriptionRoutes = require("./routes/subscription");
 const createCheckout = require("./routes/createCheckout");
 const paddleWebhook = require("./routes/paddleWebhook");
 
@@ -150,10 +151,122 @@ app.post("/api/register", async (req, res) => {
   }
 });
 
+// ================= AUTH ROUTES =================
+
+app.post("/api/register", async (req, res) => {
+  // your existing register code
+});
+
+
+// 🔥 👉 ADD LOGIN ROUTE RIGHT HERE 👇
+
+app.post("/api/login", async (req, res) => {
+  const { email, password } = req.body || {};
+
+  if (!email || !password) {
+    return res.status(400).json({ error: "Email and password required" });
+  }
+
+  try {
+    const normalizedEmail = email.toLowerCase();
+
+    const result = await pool.query(
+      "SELECT id, email, password_hash, tier FROM users WHERE email = $1",
+      [normalizedEmail]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    const user = result.rows[0];
+
+    const passwordMatch = await bcrypt.compare(password, user.password_hash);
+
+    if (!passwordMatch) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    const token = jwt.sign(
+      {
+        userId: String(user.id),
+        email: user.email,
+      },
+      JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    console.log("✅ LOGIN SUCCESS:", user.id);
+
+    res.json({
+      token,
+      userId: user.id,
+      email: user.email,
+      tier: user.tier,
+    });
+
+  } catch (err) {
+    console.error("❌ LOGIN ERROR:", err.message);
+    res.status(500).json({ error: "Login failed", debug: err.message });
+  }
+});
+
+app.post("/api/login", async (req, res) => {
+  const { email, password } = req.body || {};
+
+  if (!email || !password) {
+    return res.status(400).json({ error: "Email and password required" });
+  }
+
+  try {
+    const normalizedEmail = email.toLowerCase();
+
+    const result = await pool.query(
+      "SELECT id, email, password_hash, tier FROM users WHERE email = $1",
+      [normalizedEmail]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    const user = result.rows[0];
+
+    const passwordMatch = await bcrypt.compare(password, user.password_hash);
+
+    if (!passwordMatch) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    const token = jwt.sign(
+      {
+        userId: String(user.id),
+        email: user.email,
+      },
+      JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    console.log("✅ LOGIN SUCCESS:", user.id);
+
+    res.json({
+      token,
+      userId: user.id,
+      email: user.email,
+      tier: user.tier,
+    });
+
+  } catch (err) {
+    console.error("❌ LOGIN ERROR:", err.message);
+    res.status(500).json({ error: "Login failed", debug: err.message });
+  }
+});
+
 // ================= CORE ROUTES =================
 app.use("/api/webhooks/paddle", paddleWebhook);
 app.use("/api/subscription", authMiddleware, subscriptionStatus);
 app.use("/api/payments", authMiddleware, createCheckout);
+app.use("/api", subscriptionRoutes);
 
 // ================= OTHER ROUTES =================
 app.use("/api", rugbyRoutes);

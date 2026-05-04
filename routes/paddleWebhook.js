@@ -36,7 +36,6 @@ function verifyPaddleSignature(req) {
 
   } catch (err) {
     console.error("⚠️ Signature verification failed (non-blocking):", err.message);
-    // 🔥 DO NOT THROW — keep system running
   }
 }
 
@@ -47,12 +46,8 @@ router.post("/", async (req, res) => {
   try {
     console.log("🔥 Paddle webhook received");
 
-    // 🔐 Signature check (safe mode)
     verifyPaddleSignature(req);
 
-    // =====================================================
-    // SAFE PARSE
-    // =====================================================
     let event;
     try {
       event = JSON.parse(req.body.toString());
@@ -78,8 +73,14 @@ router.post("/", async (req, res) => {
         event.data?.items?.[0]?.price?.id ||
         event.data?.items?.[0]?.price_id;
 
+      // 🔴 NEW: GET SUBSCRIPTION ID
+      const subscriptionId =
+        event.data?.subscription_id ||
+        event.data?.subscription?.id;
+
       console.log("👤 RAW USER ID:", userIdRaw);
       console.log("💰 PRICE ID:", priceId);
+      console.log("📌 SUBSCRIPTION ID:", subscriptionId);
 
       if (!userIdRaw) {
         console.error("❌ Missing userId");
@@ -105,23 +106,25 @@ router.post("/", async (req, res) => {
         console.warn("⚠️ Unknown priceId — defaulting to freemium");
       }
 
-      console.log(`🔄 Updating user ${userId} to tier: ${tier}`);
+      console.log(`🔄 Updating user ${userId} → tier: ${tier}`);
 
+      // 🔴 UPDATED QUERY (NOW SAVES SUBSCRIPTION ID)
       const result = await pool.query(
-        `UPDATE users SET tier = $1 WHERE id = $2 RETURNING id, email, tier`,
-        [tier, userId]
+        `UPDATE users 
+         SET tier = $1,
+             paddle_subscription_id = $2
+         WHERE id = $3
+         RETURNING id, email, tier, paddle_subscription_id`,
+        [tier, subscriptionId || null, userId]
       );
 
       if (result.rowCount > 0) {
-        console.log("✅ USER UPDATED SUCCESSFULLY:", result.rows[0]);
+        console.log("✅ USER UPDATED:", result.rows[0]);
       } else {
         console.error("❌ NO USER FOUND FOR ID:", userId);
       }
     }
 
-    // =====================================================
-    // ACKNOWLEDGE
-    // =====================================================
     res.json({ received: true });
 
   } catch (err) {
