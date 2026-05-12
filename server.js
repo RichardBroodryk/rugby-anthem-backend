@@ -3,17 +3,6 @@ require("dotenv").config();
 console.log("🚀 SERVER STARTING...");
 console.log("DATABASE_URL present:", !!process.env.DATABASE_URL);
 console.log("JWT_SECRET present:", !!process.env.JWT_SECRET);
-console.log("PADDLE_API_KEY present:", !!process.env.PADDLE_API_KEY);
-console.log("PADDLE_WEBHOOK_SECRET present:", !!process.env.PADDLE_WEBHOOK_SECRET);
-
-try {
-  console.log("🔌 Loading DB...");
-  const pool = require("./db");
-  console.log("✅ DB module loaded");
-} catch (err) {
-  console.error("❌ FAILED TO LOAD DB MODULE:", err.message);
-  process.exit(1);
-}
 
 // ================= IMPORTS =================
 const express = require("express");
@@ -28,7 +17,7 @@ const app = express();
 const pool = require("./db");
 console.log("✅ DB loaded");
 
-// ================= CORS =================
+// ================= CORS (FIXED) =================
 const allowedOrigins = [
   "http://localhost:3000",
   "https://www.rugbyanthemzone.com",
@@ -37,25 +26,46 @@ const allowedOrigins = [
 
 app.use(
   cors({
-    origin: function (origin, callback) {
-      if (!origin) return callback(null, true);
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true); // allow server-to-server
 
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
-      } else {
-        console.warn("❌ CORS blocked:", origin);
-        return callback(null, false);
       }
+
+      console.warn("❌ CORS blocked:", origin);
+      return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
   })
 );
 
-// ================= MIDDLEWARE =================
-// 🔥 MUST BE FIRST — raw body for Paddle webhook
-app.use("/api/webhooks/paddle", express.raw({ type: "*/*" }));
+// 🔥 VERY IMPORTANT — ensure headers always exist
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
 
-// JSON for all other routes
+  if (allowedOrigins.includes(origin)) {
+    res.header("Access-Control-Allow-Origin", origin);
+  }
+
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+  );
+  res.header(
+    "Access-Control-Allow-Methods",
+    "GET, POST, PUT, DELETE, OPTIONS"
+  );
+
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+
+  next();
+});
+
+// ================= MIDDLEWARE =================
+app.use("/api/webhooks/paddle", express.raw({ type: "*/*" }));
 app.use(express.json());
 
 // ================= JWT =================
@@ -69,6 +79,7 @@ if (!JWT_SECRET) {
 function authMiddleware(req, res, next) {
   try {
     const header = req.headers.authorization;
+
     if (!header || !header.toLowerCase().startsWith("bearer ")) {
       return res.status(401).json({ error: "No token" });
     }
@@ -80,12 +91,12 @@ function authMiddleware(req, res, next) {
     req.userEmail = decoded.email;
 
     next();
-  } catch (err) {
+  } catch {
     return res.status(401).json({ error: "Invalid token" });
   }
 }
 
-// ================= ROUTE IMPORTS =================
+// ================= ROUTES =================
 const subscriptionStatus = require("./routes/subscriptionStatus");
 const subscriptionRoutes = require("./routes/subscription");
 const createCheckout = require("./routes/createCheckout");
@@ -117,30 +128,26 @@ app.post("/api/register", async (req, res) => {
       `INSERT INTO users (email, password_hash, tier, is_active, auth_provider) 
        VALUES ($1, $2, $3, $4, $5) 
        RETURNING id, email, tier`,
-      [normalizedEmail, hashed, 'freemium', true, 'email']
+      [normalizedEmail, hashed, "freemium", true, "email"]
     );
 
-    const newUser = result.rows[0];
+    const user = result.rows[0];
 
-    console.log("✅ New user created successfully - ID:", newUser.id);
-
-    // 🔥 THIS IS THE MISSING PIECE
     const token = jwt.sign(
       {
-        userId: String(newUser.id),   // MUST match authMiddleware
-        email: newUser.email
+        userId: String(user.id),
+        email: user.email,
       },
       JWT_SECRET,
       { expiresIn: "7d" }
     );
 
     res.json({
-      token,                        // 🔥 ADD THIS
-      userId: newUser.id,
-      email: newUser.email,
-      tier: newUser.tier,
+      token,
+      userId: user.id,
+      email: user.email,
+      tier: user.tier,
     });
-
   } catch (err) {
     console.error("❌ REGISTER ERROR:", err.message);
 
@@ -148,18 +155,11 @@ app.post("/api/register", async (req, res) => {
       return res.status(400).json({ error: "User already exists" });
     }
 
-    res.status(500).json({ error: "Registration failed", debug: err.message });
+    res.status(500).json({ error: "Registration failed" });
   }
 });
 
-// ================= AUTH ROUTES =================
-
-app.post("/api/register", async (req, res) => {
-  // your existing register code
-});
-
-
-// 🔥 👉 ADD LOGIN ROUTE RIGHT HERE 👇
+// 🔥 SINGLE LOGIN ROUTE (FIXED — no duplicate)
 
 app.post("/api/login", async (req, res) => {
   const { email, password } = req.body || {};
@@ -176,15 +176,15 @@ app.post("/api/login", async (req, res) => {
       [normalizedEmail]
     );
 
-    if (result.rows.length === 0) {
+    if (!result.rows.length) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
     const user = result.rows[0];
 
-    const passwordMatch = await bcrypt.compare(password, user.password_hash);
+    const match = await bcrypt.compare(password, user.password_hash);
 
-    if (!passwordMatch) {
+    if (!match) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
@@ -197,69 +197,15 @@ app.post("/api/login", async (req, res) => {
       { expiresIn: "7d" }
     );
 
-    console.log("✅ LOGIN SUCCESS:", user.id);
-
     res.json({
       token,
       userId: user.id,
       email: user.email,
       tier: user.tier,
     });
-
   } catch (err) {
     console.error("❌ LOGIN ERROR:", err.message);
-    res.status(500).json({ error: "Login failed", debug: err.message });
-  }
-});
-
-app.post("/api/login", async (req, res) => {
-  const { email, password } = req.body || {};
-
-  if (!email || !password) {
-    return res.status(400).json({ error: "Email and password required" });
-  }
-
-  try {
-    const normalizedEmail = email.toLowerCase();
-
-    const result = await pool.query(
-      "SELECT id, email, password_hash, tier FROM users WHERE email = $1",
-      [normalizedEmail]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
-
-    const user = result.rows[0];
-
-    const passwordMatch = await bcrypt.compare(password, user.password_hash);
-
-    if (!passwordMatch) {
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
-
-    const token = jwt.sign(
-      {
-        userId: String(user.id),
-        email: user.email,
-      },
-      JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-
-    console.log("✅ LOGIN SUCCESS:", user.id);
-
-    res.json({
-      token,
-      userId: user.id,
-      email: user.email,
-      tier: user.tier,
-    });
-
-  } catch (err) {
-    console.error("❌ LOGIN ERROR:", err.message);
-    res.status(500).json({ error: "Login failed", debug: err.message });
+    res.status(500).json({ error: "Login failed" });
   }
 });
 
@@ -277,12 +223,11 @@ app.use("/api/rugby", rugbyData);
 app.use("/api/news", newsRoutes);
 app.use("/api/loyalty", loyaltyRoutes);
 
-// ================= HEALTH CHECK (good for Fly) =================
+// ================= HEALTH =================
 app.get("/health", (req, res) => {
-  res.json({ 
-    status: "ok", 
+  res.json({
+    status: "ok",
     time: new Date().toISOString(),
-    message: "Rugby Anthem Zone backend is running"
   });
 });
 
@@ -290,13 +235,9 @@ app.get("/", (req, res) => {
   res.send("Rugby Anthem Zone backend is running");
 });
 
-// ================= START SERVER =================
-// ================= START SERVER =================
+// ================= START =================
 const PORT = process.env.PORT || 4000;
-
-console.log("🚀 USING PORT:", PORT);
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`✅ Listening on 0.0.0.0:${PORT} - ready for Fly proxy`);
 });
