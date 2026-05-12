@@ -24,39 +24,44 @@ const allowedOrigins = [
   "https://rugbyanthemzone.com",
 ];
 
+/* ================= CORS ================= */
+
 app.use(
   cors({
-    origin: (origin, callback) => {
-      if (!origin) return callback(null, true); // allow server-to-server
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
 
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
 
       console.warn("❌ CORS blocked:", origin);
-      return callback(new Error("Not allowed by CORS"));
+      return callback(null, false);
     },
     credentials: true,
   })
 );
 
-// 🔥 VERY IMPORTANT — ensure headers always exist
+/* ================= FORCE HEADERS (CRITICAL FIX) ================= */
+
 app.use((req, res, next) => {
   const origin = req.headers.origin;
 
   if (allowedOrigins.includes(origin)) {
-    res.header("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Origin", origin);
   }
 
-  res.header(
-    "Access-Control-Allow-Headers",
-    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
-  );
-  res.header(
+  res.setHeader(
     "Access-Control-Allow-Methods",
-    "GET, POST, PUT, DELETE, OPTIONS"
+    "GET,POST,PUT,DELETE,OPTIONS"
   );
 
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization"
+  );
+
+  // 🔥 HANDLE PREFLIGHT
   if (req.method === "OPTIONS") {
     return res.sendStatus(200);
   }
