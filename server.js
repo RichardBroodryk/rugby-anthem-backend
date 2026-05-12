@@ -3,6 +3,17 @@ require("dotenv").config();
 console.log("🚀 SERVER STARTING...");
 console.log("DATABASE_URL present:", !!process.env.DATABASE_URL);
 console.log("JWT_SECRET present:", !!process.env.JWT_SECRET);
+console.log("PADDLE_API_KEY present:", !!process.env.PADDLE_API_KEY);
+console.log("PADDLE_WEBHOOK_SECRET present:", !!process.env.PADDLE_WEBHOOK_SECRET);
+
+try {
+  console.log("🔌 Loading DB...");
+  const pool = require("./db");
+  console.log("✅ DB module loaded");
+} catch (err) {
+  console.error("❌ FAILED TO LOAD DB MODULE:", err.message);
+  process.exit(1);
+}
 
 // ================= IMPORTS =================
 const express = require("express");
@@ -17,60 +28,42 @@ const app = express();
 const pool = require("./db");
 console.log("✅ DB loaded");
 
-// ================= CORS (FIXED) =================
-const allowedOrigins = [
-  "http://localhost:3000",
-  "https://www.rugbyanthemzone.com",
-  "https://rugbyanthemzone.com",
-];
-
-/* ================= CORS ================= */
-
+// ================= CORS =================
 app.use(
   cors({
-    origin: function (origin, callback) {
-      if (!origin) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
-      console.warn("❌ CORS blocked:", origin);
-      return callback(null, false);
-    },
+    origin: [
+      "https://www.rugbyanthemzone.com",
+      "https://rugbyanthemzone.com",
+    ],
     credentials: true,
   })
 );
 
-/* ================= FORCE HEADERS (CRITICAL FIX) ================= */
-
+// ================= SAFE OPTIONS HANDLER =================
 app.use((req, res, next) => {
-  const origin = req.headers.origin;
-
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  }
-
-  res.setHeader(
-    "Access-Control-Allow-Methods",
-    "GET,POST,PUT,DELETE,OPTIONS"
-  );
-
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type, Authorization"
-  );
-
-  // 🔥 HANDLE PREFLIGHT
   if (req.method === "OPTIONS") {
+    res.setHeader(
+      "Access-Control-Allow-Origin",
+      "https://www.rugbyanthemzone.com"
+    );
+    res.setHeader(
+      "Access-Control-Allow-Methods",
+      "GET,POST,PUT,DELETE,OPTIONS"
+    );
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      "Content-Type, Authorization"
+    );
     return res.sendStatus(200);
   }
-
   next();
 });
 
 // ================= MIDDLEWARE =================
+// 🔥 MUST BE FIRST — raw body for Paddle webhook
 app.use("/api/webhooks/paddle", express.raw({ type: "*/*" }));
+
+// JSON for all other routes
 app.use(express.json());
 
 // ================= JWT =================
@@ -96,12 +89,12 @@ function authMiddleware(req, res, next) {
     req.userEmail = decoded.email;
 
     next();
-  } catch {
+  } catch (err) {
     return res.status(401).json({ error: "Invalid token" });
   }
 }
 
-// ================= ROUTES =================
+// ================= ROUTE IMPORTS =================
 const subscriptionStatus = require("./routes/subscriptionStatus");
 const subscriptionRoutes = require("./routes/subscription");
 const createCheckout = require("./routes/createCheckout");
@@ -136,12 +129,14 @@ app.post("/api/register", async (req, res) => {
       [normalizedEmail, hashed, "freemium", true, "email"]
     );
 
-    const user = result.rows[0];
+    const newUser = result.rows[0];
+
+    console.log("✅ New user created successfully - ID:", newUser.id);
 
     const token = jwt.sign(
       {
-        userId: String(user.id),
-        email: user.email,
+        userId: String(newUser.id),
+        email: newUser.email,
       },
       JWT_SECRET,
       { expiresIn: "7d" }
@@ -149,9 +144,9 @@ app.post("/api/register", async (req, res) => {
 
     res.json({
       token,
-      userId: user.id,
-      email: user.email,
-      tier: user.tier,
+      userId: newUser.id,
+      email: newUser.email,
+      tier: newUser.tier,
     });
   } catch (err) {
     console.error("❌ REGISTER ERROR:", err.message);
@@ -160,11 +155,13 @@ app.post("/api/register", async (req, res) => {
       return res.status(400).json({ error: "User already exists" });
     }
 
-    res.status(500).json({ error: "Registration failed" });
+    res
+      .status(500)
+      .json({ error: "Registration failed", debug: err.message });
   }
 });
 
-// 🔥 SINGLE LOGIN ROUTE (FIXED — no duplicate)
+// ================= LOGIN =================
 
 app.post("/api/login", async (req, res) => {
   const { email, password } = req.body || {};
@@ -181,15 +178,18 @@ app.post("/api/login", async (req, res) => {
       [normalizedEmail]
     );
 
-    if (!result.rows.length) {
+    if (result.rows.length === 0) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
     const user = result.rows[0];
 
-    const match = await bcrypt.compare(password, user.password_hash);
+    const passwordMatch = await bcrypt.compare(
+      password,
+      user.password_hash
+    );
 
-    if (!match) {
+    if (!passwordMatch) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
@@ -202,6 +202,8 @@ app.post("/api/login", async (req, res) => {
       { expiresIn: "7d" }
     );
 
+    console.log("✅ LOGIN SUCCESS:", user.id);
+
     res.json({
       token,
       userId: user.id,
@@ -210,7 +212,7 @@ app.post("/api/login", async (req, res) => {
     });
   } catch (err) {
     console.error("❌ LOGIN ERROR:", err.message);
-    res.status(500).json({ error: "Login failed" });
+    res.status(500).json({ error: "Login failed", debug: err.message });
   }
 });
 
@@ -233,6 +235,7 @@ app.get("/health", (req, res) => {
   res.json({
     status: "ok",
     time: new Date().toISOString(),
+    message: "Rugby Anthem Zone backend is running",
   });
 });
 
@@ -243,6 +246,9 @@ app.get("/", (req, res) => {
 // ================= START =================
 const PORT = process.env.PORT || 4000;
 
+console.log("🚀 USING PORT:", PORT);
+
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`✅ Listening on 0.0.0.0:${PORT} - ready for Fly proxy`);
 });
