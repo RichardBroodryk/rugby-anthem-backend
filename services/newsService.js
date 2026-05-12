@@ -2,11 +2,7 @@ const axios = require("axios");
 const { mapNewsItem } = require("../utils/newsMapper");
 const { newsData } = require("../fallback/newsData");
 
-/* ================= ENV ================= */
-
 const GNEWS_API_KEY = process.env.GNEWS_API_KEY;
-
-console.log("🟡 GNEWS_API_KEY:", GNEWS_API_KEY);
 
 /* ================= GET NEWS ================= */
 
@@ -28,29 +24,31 @@ async function getNews() {
       }
     );
 
+    console.log("🟡 RAW RESPONSE:", response.data);
+
     const articles = response.data?.articles || [];
 
-    console.log(
-      `🟡 [NEWS SERVICE] API returned ${articles.length} articles`
-    );
+    console.log(`🟡 API returned ${articles.length} articles`);
+
+    if (!articles.length) {
+      console.warn("⚠️ EMPTY API RESPONSE — NOT USING FALLBACK");
+      return []; // 🔥 DO NOT FALL BACK HERE
+    }
 
     const mapped = articles.map(mapNewsItem).filter(Boolean);
 
-    if (!mapped.length) {
-      console.warn("⚠️ [NEWS SERVICE] Empty API → using fallback");
-      return newsData;
-    }
-
     console.log(
-      `🟢 [NEWS SERVICE] Success (${mapped.length}) — ${
-        Date.now() - start
-      }ms`
+      `🟢 SUCCESS (${mapped.length}) — ${Date.now() - start}ms`
     );
 
     return mapped;
   } catch (error) {
-    console.error("🔴 [NEWS SERVICE] API failed → fallback", error.message);
-    return newsData;
+    console.error(
+      "🔴 FULL ERROR:",
+      error.response?.data || error.message
+    );
+
+    return []; // 🔥 DO NOT FALL BACK
   }
 }
 

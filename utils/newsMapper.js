@@ -1,3 +1,10 @@
+/* ================= CONSTANTS ================= */
+
+const FALLBACK_IMAGE =
+  "https://images.unsplash.com/photo-1543357480-c60d40007a3f";
+
+/* ================= MAIN MAPPER ================= */
+
 function mapNewsItem(article) {
   if (!article) return null;
 
@@ -13,6 +20,12 @@ function mapNewsItem(article) {
     url: safeString(article.url, "#"),
 
     time: formatTime(article.publishedAt),
+
+    // for sorting
+    publishedAt: article.publishedAt || null,
+
+    // ✅ ALWAYS GUARANTEE IMAGE
+    image: article.image || FALLBACK_IMAGE,
 
     category: detectCategory(article),
 
@@ -52,7 +65,6 @@ function extractTags(article) {
   const text = `${article.title || ""} ${article.description || ""}`.toLowerCase();
 
   const keywords = [
-    // Core nations
     "springbok",
     "springboks",
     "all blacks",
@@ -63,11 +75,8 @@ function extractTags(article) {
     "wales",
     "australia",
     "argentina",
-
-    // ✅ NEW ADDITIONS
     "italy",
     "azzurri",
-
     "fiji",
     "fijian",
     "flying fijians",
@@ -76,7 +85,7 @@ function extractTags(article) {
   return keywords
     .filter((k) => text.includes(k))
     .map((k) => normalizeTag(k))
-    .filter((v, i, arr) => arr.indexOf(v) === i); // remove duplicates
+    .filter((v, i, arr) => arr.indexOf(v) === i);
 }
 
 /* ================= NORMALIZATION ================= */
@@ -91,8 +100,6 @@ function normalizeTag(tag) {
   if (tag === "wales") return "Wales";
   if (tag === "australia") return "Australia";
   if (tag === "argentina") return "Argentina";
-
-  // ✅ NEW
   if (tag.includes("italy") || tag.includes("azzurri")) return "Italy";
   if (tag.includes("fiji")) return "Fiji";
 
