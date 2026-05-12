@@ -29,27 +29,27 @@ const pool = require("./db");
 console.log("✅ DB loaded");
 
 // ================= CORS =================
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://www.rugbyanthemzone.com",
+  "https://rugbyanthemzone.com",
+];
+
 app.use(
   cors({
-    origin: [
-      "http://localhost:3000", 
-      "https://www.rugbyanthemzone.com",
-      "https://rugbyanthemzone.com",
-    ],
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      } else {
+        console.warn("❌ CORS blocked:", origin);
+        return callback(null, false);
+      }
+    },
     credentials: true,
   })
 );
-
-// Safe OPTIONS handler
-app.use((req, res, next) => {
-  if (req.method === "OPTIONS") {
-    res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-    return res.sendStatus(200);
-  }
-  next();
-});
 
 // ================= MIDDLEWARE =================
 // 🔥 MUST BE FIRST — raw body for Paddle webhook
