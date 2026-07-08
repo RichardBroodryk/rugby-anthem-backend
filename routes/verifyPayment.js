@@ -1,50 +1,29 @@
 // =====================================================
-// Checkout Route (Payments - CREATE CHECKOUT ONLY)
+// Legacy Verify Payment Route — Rugby Anthem Zone
+// DISABLED DURING ONE-TIER PAYMENT RESET
+//
+// This file previously contained an older checkout/payment path
+// that used tier-based premium/super logic.
+// It is intentionally disabled so it cannot conflict with the
+// live one-tier checkout flow now handled by:
+//
+// - routes/createCheckout.js
+// - payments/paymentRouter.js
+// - payments/paddleService.js
+//
+// If a frontend/backend path still tries to call this route,
+// it should be updated to use /api/payments instead.
 // =====================================================
 
 const express = require("express");
 const router = express.Router();
 
-const paymentRouter = require("../payments/paymentRouter");
-
-router.post("/", async (req, res) => {
-  try {
-    const { tier } = req.body;
-
-    const email = req.userEmail;
-    const userId = req.userId;
-
-    console.log("🧾 Checkout request:", { tier, email, userId });
-
-    if (!tier) {
-      return res.status(400).json({ error: "Tier required" });
-    }
-
-    if (!email) {
-      return res.status(400).json({ error: "User email missing in token" });
-    }
-
-    if (!userId) {
-      return res.status(400).json({ error: "User ID missing in token" });
-    }
-
-    const result = await paymentRouter.createCheckout({
-      provider: "paddle",
-      tier,
-      email,
-      userId,
-    });
-
-    return res.json(result);
-
-  } catch (err) {
-    console.error("❌ Checkout error:", err.message);
-
-    return res.status(500).json({
-      error: "Checkout failed",
-      debug: err.message,
-    });
-  }
+router.all("*", async (_req, res) => {
+  return res.status(410).json({
+    error: "Legacy payment verification route disabled",
+    message:
+      "Use the one-tier /api/payments checkout flow instead.",
+  });
 });
 
 module.exports = router;

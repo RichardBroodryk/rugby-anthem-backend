@@ -1,47 +1,55 @@
 // =====================================================
-// Paddle Payment Service — FIXED & ROBUST
+// Paddle Payment Service — Rugby Anthem Zone
+// One-tier paid access checkout
+//
+// Frontend sends:
+// { product: "raz-premium" }
+//
+// Backend uses one Paddle price only:
+// - PADDLE_PRICE_RAZ
 // =====================================================
 
 const axios = require("axios");
 
 const PADDLE_API_KEY = (process.env.PADDLE_API_KEY || "").trim();
-const PREMIUM_PRICE_ID = (process.env.PADDLE_PRICE_PREMIUM || "").trim();
-const SUPER_PRICE_ID = (process.env.PADDLE_PRICE_SUPER || "").trim();
-const FRONTEND_URL = (process.env.FRONTEND_URL || "https://rugbyanthemzone.com").trim();
+const RAZ_PRICE_ID = (process.env.PADDLE_PRICE_RAZ || "").trim();
+const FRONTEND_URL = (
+  process.env.FRONTEND_URL || "https://www.rugbyanthemzone.com"
+).trim();
 
-if (!PADDLE_API_KEY) throw new Error("Missing PADDLE_API_KEY");
-if (!PREMIUM_PRICE_ID || !SUPER_PRICE_ID) throw new Error("Missing PADDLE_PRICE_PREMIUM or PADDLE_PRICE_SUPER");
-if (!FRONTEND_URL) console.warn("⚠️ FRONTEND_URL not set — using default");
+if (!PADDLE_API_KEY) {
+  throw new Error("Missing PADDLE_API_KEY");
+}
 
-async function createCheckout({ tier, email, userId }) {
-  console.log("🧾 Paddle checkout request:", { tier, email, userId });
+if (!RAZ_PRICE_ID) {
+  throw new Error("Missing PADDLE_PRICE_RAZ");
+}
 
-  // 🔥 Support both string and number from frontend
-  let priceId;
-  const normalizedTier = String(tier).toLowerCase().trim();
+if (!FRONTEND_URL) {
+  console.warn("⚠️ FRONTEND_URL not set — using default");
+}
 
-  if (normalizedTier === "premium" || normalizedTier === "8") {
-    priceId = PREMIUM_PRICE_ID;
-    console.log("✅ Selected PREMIUM price");
-  } else if (normalizedTier === "super" || normalizedTier === "9") {
-    priceId = SUPER_PRICE_ID;
-    console.log("✅ Selected SUPER price");
-  } else {
-    throw new Error(`Invalid subscription tier: ${tier}`);
+async function createCheckout({ product, email, userId }) {
+  console.log("🧾 Paddle checkout request:", { product, email, userId });
+
+  const normalizedProduct = String(product || "").toLowerCase().trim();
+
+  if (normalizedProduct !== "raz-premium") {
+    throw new Error(`Invalid checkout product: ${product}`);
   }
 
   try {
     const payload = {
-      items: [{ price_id: priceId, quantity: 1 }],
+      items: [{ price_id: RAZ_PRICE_ID, quantity: 1 }],
       customer: { email },
       collection_mode: "automatic",
       checkout: {
-        url: "https://rugbyanthemzone.com/checkout"
+        url: `${FRONTEND_URL}/checkout`,
       },
       custom_data: {
-        tier: normalizedTier,
-        user_id: String(userId) // Force string
-      }
+        product: "raz-premium",
+        user_id: String(userId),
+      },
     };
 
     const paddleRes = await axios.post(
@@ -50,15 +58,17 @@ async function createCheckout({ tier, email, userId }) {
       {
         headers: {
           Authorization: `Bearer ${PADDLE_API_KEY}`,
-          "Content-Type": "application/json"
-        }
+          "Content-Type": "application/json",
+        },
       }
     );
 
     console.log("📦 Paddle transaction created successfully");
 
     const transaction = paddleRes?.data?.data;
-    if (!transaction) throw new Error("No transaction data in response");
+    if (!transaction) {
+      throw new Error("No transaction data in response");
+    }
 
     const checkoutUrl = transaction.checkout?.url;
     if (!checkoutUrl) {
@@ -69,7 +79,11 @@ async function createCheckout({ tier, email, userId }) {
 
     console.log("✅ Paddle checkout URL:", checkoutUrl);
 
-    return { checkoutUrl, transactionId: transaction.id };
+    return {
+      checkoutUrl,
+      provider: "paddle",
+      transactionId: transaction.id,
+    };
   } catch (err) {
     console.error("❌ Paddle API error:");
     if (err.response?.data) {
@@ -77,7 +91,10 @@ async function createCheckout({ tier, email, userId }) {
     } else {
       console.error(err.message);
     }
-    throw new Error("Paddle transaction creation failed: " + (err.message || "Unknown error"));
+
+    throw new Error(
+      "Paddle transaction creation failed: " + (err.message || "Unknown error")
+    );
   }
 }
 

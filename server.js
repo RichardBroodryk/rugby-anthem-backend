@@ -4,11 +4,14 @@ console.log("🚀 SERVER STARTING...");
 console.log("DATABASE_URL present:", !!process.env.DATABASE_URL);
 console.log("JWT_SECRET present:", !!process.env.JWT_SECRET);
 console.log("PADDLE_API_KEY present:", !!process.env.PADDLE_API_KEY);
-console.log("PADDLE_WEBHOOK_SECRET present:", !!process.env.PADDLE_WEBHOOK_SECRET);
+console.log(
+  "PADDLE_WEBHOOK_SECRET present:",
+  !!process.env.PADDLE_WEBHOOK_SECRET
+);
 
 try {
   console.log("🔌 Loading DB...");
-  const pool = require("./db");
+  require("./db");
   console.log("✅ DB module loaded");
 } catch (err) {
   console.error("❌ FAILED TO LOAD DB MODULE:", err.message);
@@ -20,6 +23,9 @@ const express = require("express");
 const cors = require("cors");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+
+// Shared auth middleware
+const { authMiddleware } = require("./middleware/authMiddleware");
 
 // ================= INIT =================
 const app = express();
@@ -43,7 +49,10 @@ app.use(
 // ================= SAFE OPTIONS HANDLER =================
 app.use((req, res, next) => {
   if (req.method === "OPTIONS") {
-   res.setHeader("Access-Control-Allow-Origin", req.headers.origin);
+    if (req.headers.origin) {
+      res.setHeader("Access-Control-Allow-Origin", req.headers.origin);
+    }
+
     res.setHeader(
       "Access-Control-Allow-Methods",
       "GET,POST,PUT,DELETE,OPTIONS"
@@ -54,11 +63,12 @@ app.use((req, res, next) => {
     );
     return res.sendStatus(200);
   }
+
   next();
 });
 
 // ================= MIDDLEWARE =================
-// 🔥 MUST BE FIRST — raw body for Paddle webhook
+// Paddle webhook must receive raw body
 app.use("/api/webhooks/paddle", express.raw({ type: "*/*" }));
 
 // JSON for all other routes
@@ -71,27 +81,6 @@ if (!JWT_SECRET) {
   process.exit(1);
 }
 
-// ================= AUTH MIDDLEWARE =================
-function authMiddleware(req, res, next) {
-  try {
-    const header = req.headers.authorization;
-
-    if (!header || !header.toLowerCase().startsWith("bearer ")) {
-      return res.status(401).json({ error: "No token" });
-    }
-
-    const token = header.slice(7).trim();
-    const decoded = jwt.verify(token, JWT_SECRET);
-
-    req.userId = decoded.userId;
-    req.userEmail = decoded.email;
-
-    next();
-  } catch (err) {
-    return res.status(401).json({ error: "Invalid token" });
-  }
-}
-
 // ================= ROUTE IMPORTS =================
 const subscriptionStatus = require("./routes/subscriptionStatus");
 const subscriptionRoutes = require("./routes/subscription");
@@ -100,15 +89,32 @@ const paddleWebhook = require("./routes/paddleWebhook");
 
 const rugbyRoutes = require("./routes/testRugby");
 const statsGateway = require("./routes/statsGateway");
-const payfastNotify = require("./routes/payfastNotify");
 const rugbyData = require("./routes/rugbyData");
 const newsRoutes = require("./routes/news");
 const loyaltyRoutes = require("./routes/loyalty");
 
 console.log("✅ All routes loaded");
 
-// ================= AUTH ROUTES =================
+// =====================================================
+// ACCESS HELPERS
+// Transitional one-tier model:
+//
+// - users.tier is still present for legacy compatibility
+// - "premium" is treated as the paid RAZ access flag for now
+// - "free" means account exists but no paid access yet
+// =====================================================
+function buildAccessPayload(userRow) {
+  const tier = String(userRow?.tier || "free").toLowerCase();
+  const hasAccess = tier === "premium" && userRow?.is_active === true;
 
+  return {
+    access: hasAccess ? "active" : "inactive",
+    hasAccess,
+    tier, // transitional legacy field; remove later once frontend is fully cleaned
+  };
+}
+
+// ================= AUTH ROUTES =================
 app.post("/api/register", async (req, res) => {
   const { email, password } = req.body || {};
 
@@ -117,14 +123,28 @@ app.post("/api/register", async (req, res) => {
   }
 
   try {
-    const normalizedEmail = email.toLowerCase();
+    const normalizedEmail = email.toLowerCase().trim();
     const hashed = await bcrypt.hash(password, 10);
 
     const result = await pool.query(
-      `INSERT INTO users (email, password_hash, tier, is_active, auth_provider) 
-       VALUES ($1, $2, $3, $4, $5) 
-       RETURNING id, email, tier`,
-      [normalizedEmail, hashed, "freemium", true, "email"]
+      `
+      INSERT INTO users (
+        email,
+        password_hash,
+        tier,
+        is_active,
+        auth_provider
+      )
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING id, email, tier, is_active
+      `,
+      [
+        normalizedEmail,
+        hashed,
+        "free", // account exists, but no paid access yet
+        false, // access becomes active after successful payment webhook
+        "email",
+      ]
     );
 
     const newUser = result.rows[0];
@@ -144,7 +164,7 @@ app.post("/api/register", async (req, res) => {
       token,
       userId: newUser.id,
       email: newUser.email,
-      tier: newUser.tier,
+      ...buildAccessPayload(newUser),
     });
   } catch (err) {
     console.error("❌ REGISTER ERROR:", err.message);
@@ -153,14 +173,14 @@ app.post("/api/register", async (req, res) => {
       return res.status(400).json({ error: "User already exists" });
     }
 
-    res
-      .status(500)
-      .json({ error: "Registration failed", debug: err.message });
+    res.status(500).json({
+      error: "Registration failed",
+      debug: err.message,
+    });
   }
 });
 
 // ================= LOGIN =================
-
 app.post("/api/login", async (req, res) => {
   const { email, password } = req.body || {};
 
@@ -169,10 +189,14 @@ app.post("/api/login", async (req, res) => {
   }
 
   try {
-    const normalizedEmail = email.toLowerCase();
+    const normalizedEmail = email.toLowerCase().trim();
 
     const result = await pool.query(
-      "SELECT id, email, password_hash, tier FROM users WHERE email = $1",
+      `
+      SELECT id, email, password_hash, tier, is_active
+      FROM users
+      WHERE email = $1
+      `,
       [normalizedEmail]
     );
 
@@ -206,11 +230,14 @@ app.post("/api/login", async (req, res) => {
       token,
       userId: user.id,
       email: user.email,
-      tier: user.tier,
+      ...buildAccessPayload(user),
     });
   } catch (err) {
     console.error("❌ LOGIN ERROR:", err.message);
-    res.status(500).json({ error: "Login failed", debug: err.message });
+    res.status(500).json({
+      error: "Login failed",
+      debug: err.message,
+    });
   }
 });
 
@@ -220,16 +247,15 @@ app.use("/api/subscription", authMiddleware, subscriptionStatus);
 app.use("/api/payments", authMiddleware, createCheckout);
 app.use("/api", subscriptionRoutes);
 
-// ================= OTHER ROUTES =================
+// ================= OTHER APP ROUTES =================
 app.use("/api", rugbyRoutes);
 app.use("/api/stats", statsGateway);
-app.use("/api", payfastNotify);
 app.use("/api/rugby", rugbyData);
 app.use("/api/news", newsRoutes);
 app.use("/api/loyalty", loyaltyRoutes);
 
 // ================= HEALTH =================
-app.get("/health", (req, res) => {
+app.get("/health", (_req, res) => {
   res.json({
     status: "ok",
     time: new Date().toISOString(),
@@ -237,7 +263,7 @@ app.get("/health", (req, res) => {
   });
 });
 
-app.get("/", (req, res) => {
+app.get("/", (_req, res) => {
   res.send("Rugby Anthem Zone backend is running");
 });
 

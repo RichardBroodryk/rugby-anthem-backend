@@ -1,31 +1,32 @@
 // =====================================================
-// Payment Dispatcher (Switch between providers)
+// Payment Dispatcher — Rugby Anthem Zone
+// One-tier paid access model
 // =====================================================
 
 const paddleService = require("./paddleService");
 
-async function createCheckout({ provider, tier, email, userId }) {
-  console.log("💳 Payment Dispatcher called:", { provider, tier, email, userId });
+async function createCheckout({ provider, product, email, userId }) {
+  console.log("💳 Payment Dispatcher called:", {
+    provider,
+    product,
+    email,
+    userId,
+  });
 
-  if (!provider || !tier || !email || !userId) {
+  if (!provider || !product || !email || !userId) {
     throw new Error("Missing required fields for checkout");
   }
 
   switch (provider.toLowerCase()) {
     case "paddle":
-      return paddleService.createCheckout({ tier, email, userId });
+      return paddleService.createCheckout({ product, email, userId });
 
     case "payfast":
-      const payfastService = require("./payfastService");
-      return payfastService.createCheckout({ tier, email, userId });
-
     case "fastspring":
-      const fastspringService = require("./fastspringService");
-      return fastspringService.createCheckout({ tier, email, userId });
-
     case "ozow":
-      const ozowService = require("./ozowService");
-      return ozowService.createCheckout({ tier, email, userId });
+      throw new Error(
+        `Payment provider "${provider}" is not enabled for the current Rugby Anthem Zone one-tier checkout flow`
+      );
 
     default:
       throw new Error(`Unsupported payment provider: ${provider}`);
@@ -33,5 +34,5 @@ async function createCheckout({ provider, tier, email, userId }) {
 }
 
 module.exports = {
-  createCheckout
+  createCheckout,
 };
