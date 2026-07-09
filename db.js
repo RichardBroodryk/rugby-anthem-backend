@@ -2,20 +2,20 @@ const { Pool } = require("pg");
 
 console.log("🔌 Loading database module...");
 
-const isProduction = process.env.NODE_ENV === "production";
+const hasDatabaseUrl =
+  typeof process.env.DATABASE_URL === "string" &&
+  process.env.DATABASE_URL.trim().length > 0;
 
 let pool;
 
-if (process.env.DATABASE_URL) {
+if (hasDatabaseUrl) {
   const connString = process.env.DATABASE_URL.trim();
 
   pool = new Pool({
     connectionString: connString,
-    ssl: isProduction
-      ? {
-          rejectUnauthorized: false,
-        }
-      : false,
+    ssl: {
+      rejectUnauthorized: false,
+    },
     max: 10,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000,
@@ -57,11 +57,8 @@ pool.on("error", (err) => {
   } catch (err) {
     console.error("❌ CRITICAL: Database connection failed:", err.message);
 
-    if (process.env.DATABASE_URL) {
-      console.error(
-        "DATABASE_URL starts with:",
-        `${process.env.DATABASE_URL.substring(0, 40)}...`
-      );
+    if (hasDatabaseUrl) {
+      console.error("DATABASE_URL was provided but connection failed.");
     } else {
       console.error("DATABASE_URL not set; using local DB env vars");
     }

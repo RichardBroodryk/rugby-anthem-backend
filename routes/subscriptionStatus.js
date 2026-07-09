@@ -61,7 +61,13 @@ router.get("/", async (req, res) => {
 
     const user = userRes.rows[0];
 
-    // Get most recent subscription record if present
+    // =====================================================
+    // Get the most relevant subscription record if present.
+    //
+    // Prefer active-ish records first so the frontend does not
+    // accidentally read an older cancelled record as the current
+    // subscription state.
+    // =====================================================
     const subscriptionRes = await pool.query(
       `
       SELECT
@@ -69,10 +75,17 @@ router.get("/", async (req, res) => {
         status,
         next_billing_date,
         cancelled_at,
-        updated_at
+        updated_at,
+        created_at
       FROM subscriptions
       WHERE user_id = $1
-      ORDER BY updated_at DESC
+      ORDER BY
+        CASE
+          WHEN LOWER(COALESCE(status, '')) IN ('active', 'trialing', 'canceling', 'cancelling', 'past_due', 'paused') THEN 0
+          ELSE 1
+        END,
+        updated_at DESC,
+        created_at DESC
       LIMIT 1
       `,
       [userId]
