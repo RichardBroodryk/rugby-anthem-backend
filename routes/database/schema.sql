@@ -58,8 +58,12 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   paddle_subscription_id VARCHAR(255) UNIQUE NOT NULL,
   paddle_customer_id VARCHAR(255),
 
-  -- one-tier app still stores status lifecycle here
-  -- examples: active, canceling, cancelled, paused, past_due
+  -- Transitional one-tier compatibility field.
+  -- Current webhook logic writes ACTIVE_TIER ("premium") here.
+  tier_code VARCHAR(50) DEFAULT 'premium',
+
+  -- One-tier app stores lifecycle here:
+  -- active, canceling, cancelled, paused, past_due, etc.
   status VARCHAR(50) NOT NULL,
 
   currency VARCHAR(3),
