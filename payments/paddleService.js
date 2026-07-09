@@ -58,22 +58,38 @@ async function createCheckout({ product, email, userId }) {
       }
     );
 
-    const transaction = paddleRes?.data?.data;
+   const transaction = paddleRes?.data?.data;
 
-    if (!transaction) {
-      console.error("❌ Paddle response missing transaction data");
-      console.error(JSON.stringify(paddleRes.data, null, 2));
-      throw new Error("No transaction data returned by Paddle");
-    }
+if (!transaction) {
+  console.error("❌ Paddle response missing transaction data");
+  console.error(JSON.stringify(paddleRes.data, null, 2));
+  throw new Error("No transaction data returned by Paddle");
+}
 
-    // IMPORTANT:
-    // For this flow we need the hosted Paddle checkout URL,
-    // not our own frontend /checkout page.
-    const checkoutUrl =
-      transaction.checkout?.url ||
-      transaction.checkout_url ||
-      transaction.url ||
-      null;
+// TEMP DEBUG: log the full Paddle transaction so we can see
+// exactly which checkout / hosted URL fields are present.
+console.log(
+  "🧪 FULL PADDLE TRANSACTION:",
+  JSON.stringify(transaction, null, 2)
+);
+
+const checkoutUrl =
+  transaction.checkout?.url ||
+  transaction.checkout_url ||
+  transaction.url ||
+  null;
+
+console.log("🧪 CHECKOUT URL CANDIDATES:", {
+  "transaction.checkout?.url": transaction.checkout?.url || null,
+  "transaction.checkout_url": transaction.checkout_url || null,
+  "transaction.url": transaction.url || null,
+});
+
+if (!checkoutUrl) {
+  console.error("❌ Missing hosted checkout URL in Paddle response");
+  console.error(JSON.stringify(paddleRes.data, null, 2));
+  throw new Error("Hosted checkout URL missing from Paddle response");
+}
 
     if (!checkoutUrl) {
       console.error("❌ Missing hosted checkout URL in Paddle response");
