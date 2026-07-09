@@ -25,10 +25,6 @@ if (!RAZ_PRICE_ID) {
   throw new Error("Missing PADDLE_PRICE_RAZ");
 }
 
-if (!FRONTEND_URL) {
-  console.warn("⚠️ FRONTEND_URL not set — using default");
-}
-
 async function createCheckout({ product, email, userId }) {
   console.log("🧾 Paddle checkout request:", { product, email, userId });
 
@@ -41,11 +37,10 @@ async function createCheckout({ product, email, userId }) {
   try {
     const payload = {
       items: [{ price_id: RAZ_PRICE_ID, quantity: 1 }],
-      customer: { email },
-      collection_mode: "automatic",
-      checkout: {
-        url: `${FRONTEND_URL}/checkout`,
+      customer: {
+        email,
       },
+      collection_mode: "automatic",
       custom_data: {
         product: "raz-premium",
         user_id: String(userId),
@@ -63,21 +58,31 @@ async function createCheckout({ product, email, userId }) {
       }
     );
 
-    console.log("📦 Paddle transaction created successfully");
-
     const transaction = paddleRes?.data?.data;
+
     if (!transaction) {
-      throw new Error("No transaction data in response");
-    }
-
-    const checkoutUrl = transaction.checkout?.url;
-    if (!checkoutUrl) {
-      console.error("❌ Missing checkout URL in Paddle response");
+      console.error("❌ Paddle response missing transaction data");
       console.error(JSON.stringify(paddleRes.data, null, 2));
-      throw new Error("Checkout URL missing");
+      throw new Error("No transaction data returned by Paddle");
     }
 
-    console.log("✅ Paddle checkout URL:", checkoutUrl);
+    // IMPORTANT:
+    // For this flow we need the hosted Paddle checkout URL,
+    // not our own frontend /checkout page.
+    const checkoutUrl =
+      transaction.checkout?.url ||
+      transaction.checkout_url ||
+      transaction.url ||
+      null;
+
+    if (!checkoutUrl) {
+      console.error("❌ Missing hosted checkout URL in Paddle response");
+      console.error(JSON.stringify(paddleRes.data, null, 2));
+      throw new Error("Hosted checkout URL missing from Paddle response");
+    }
+
+    console.log("📦 Paddle transaction created successfully");
+    console.log("✅ Hosted Paddle checkout URL:", checkoutUrl);
 
     return {
       checkoutUrl,
