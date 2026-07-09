@@ -14,6 +14,7 @@
 const express = require("express");
 const router = express.Router();
 const pool = require("../db");
+const { authMiddleware } = require("../middleware/authMiddleware");
 
 function buildAccessPayload(userRow, subscriptionRow = null) {
   const tier = String(userRow?.tier || "free").toLowerCase();
@@ -38,7 +39,7 @@ function buildAccessPayload(userRow, subscriptionRow = null) {
 // =====================================================
 // GET /api/subscription
 // =====================================================
-router.get("/", async (req, res) => {
+router.get("/", authMiddleware, async (req, res) => {
   try {
     const userId = req.userId;
 
@@ -106,9 +107,61 @@ router.get("/", async (req, res) => {
 // Backward-compatible alias
 // GET /api/subscription/status
 // =====================================================
-router.get("/status", async (req, res, next) => {
-  req.url = "/";
-  return router.handle(req, res, next);
+router.get("/status", authMiddleware, async (req, res) => {
+  try {
+    const userId = req.userId;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const userRes = await pool.query(
+      `
+      SELECT id, email, tier, is_active
+      FROM users
+      WHERE id = $1
+      `,
+      [userId]
+    );
+
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const user = userRes.rows[0];
+
+    const subscriptionRes = await pool.query(
+      `
+      SELECT
+        paddle_subscription_id,
+        status,
+        next_billing_date,
+        cancelled_at,
+        updated_at,
+        created_at
+      FROM subscriptions
+      WHERE user_id = $1
+      ORDER BY
+        CASE
+          WHEN LOWER(COALESCE(status, '')) IN ('active', 'trialing', 'canceling', 'cancelling', 'past_due', 'paused') THEN 0
+          ELSE 1
+        END,
+        updated_at DESC,
+        created_at DESC
+      LIMIT 1
+      `,
+      [userId]
+    );
+
+    const subscription = subscriptionRes.rows[0] || null;
+
+    return res.json(buildAccessPayload(user, subscription));
+  } catch (err) {
+    console.error("Subscription status error:", err);
+    return res.status(500).json({
+      error: "Failed to fetch subscription status",
+    });
+  }
 });
 
 module.exports = router;
