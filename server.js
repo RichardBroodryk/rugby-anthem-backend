@@ -90,6 +90,7 @@ const subscriptionStatus = require("./routes/subscriptionStatus");
 const subscriptionRoutes = require("./routes/subscription");
 const createCheckout = require("./routes/createCheckout");
 const paddleWebhook = require("./routes/paddleWebhook");
+const paddleConfig = require("./routes/paddleConfig");
 
 const rugbyRoutes = require("./routes/testRugby");
 const statsGateway = require("./routes/statsGateway");
@@ -240,6 +241,7 @@ app.post("/api/login", async (req, res) => {
 app.use("/api/webhooks/paddle", paddleWebhook);
 app.use("/api/subscription", authMiddleware, subscriptionStatus);
 app.use("/api/payments", authMiddleware, createCheckout);
+app.use("/api/payments/config", paddleConfig);
 app.use("/api", subscriptionRoutes);
 
 // ================= OTHER APP ROUTES =================
