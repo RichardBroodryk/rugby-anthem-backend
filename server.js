@@ -44,13 +44,14 @@ if (!JWT_SECRET) {
 // ================= CORS =================
 const allowedOrigins = new Set([
   "http://localhost:3000",
+  "http://localhost:5173",
   "https://www.rugbyanthemzone.com",
   "https://rugbyanthemzone.com",
 ]);
 
 const corsOptions = {
   origin(origin, callback) {
-    // Allow server-to-server / curl / health checks with no origin
+    // Allow server-to-server / curl / Render health checks with no origin
     if (!origin) {
       return callback(null, true);
     }
@@ -70,7 +71,6 @@ const corsOptions = {
 
 // Apply CORS globally before routes
 app.use(cors(corsOptions));
-app.options("*", cors(corsOptions));
 
 // ================= MIDDLEWARE =================
 // Paddle webhook must receive raw body
@@ -136,13 +136,7 @@ app.post("/api/register", async (req, res) => {
       VALUES ($1, $2, $3, $4, $5)
       RETURNING id, email, tier, is_active
       `,
-      [
-        normalizedEmail,
-        hashed,
-        "free",
-        false,
-        "email",
-      ]
+      [normalizedEmail, hashed, "free", false, "email"]
     );
 
     const newUser = result.rows[0];
@@ -204,10 +198,7 @@ app.post("/api/login", async (req, res) => {
 
     const user = result.rows[0];
 
-    const passwordMatch = await bcrypt.compare(
-      password,
-      user.password_hash
-    );
+    const passwordMatch = await bcrypt.compare(password, user.password_hash);
 
     if (!passwordMatch) {
       return res.status(401).json({ error: "Invalid credentials" });
@@ -272,5 +263,5 @@ console.log("🚀 USING PORT:", PORT);
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`✅ Listening on 0.0.0.0:${PORT} - ready for Fly proxy`);
+  console.log(`✅ Listening on 0.0.0.0:${PORT}`);
 });
