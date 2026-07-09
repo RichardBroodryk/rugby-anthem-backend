@@ -34,38 +34,43 @@ const app = express();
 const pool = require("./db");
 console.log("✅ DB loaded");
 
-// ================= CORS =================
-app.use(
-  cors({
-    origin: [
-      "http://localhost:3000",
-      "https://www.rugbyanthemzone.com",
-      "https://rugbyanthemzone.com",
-    ],
-    credentials: true,
-  })
-);
+// ================= JWT =================
+const JWT_SECRET = (process.env.JWT_SECRET || "").trim();
+if (!JWT_SECRET) {
+  console.error("❌ JWT_SECRET missing");
+  process.exit(1);
+}
 
-// ================= SAFE OPTIONS HANDLER =================
-app.use((req, res, next) => {
-  if (req.method === "OPTIONS") {
-    if (req.headers.origin) {
-      res.setHeader("Access-Control-Allow-Origin", req.headers.origin);
+// ================= CORS =================
+const allowedOrigins = new Set([
+  "http://localhost:3000",
+  "https://www.rugbyanthemzone.com",
+  "https://rugbyanthemzone.com",
+]);
+
+const corsOptions = {
+  origin(origin, callback) {
+    // Allow server-to-server / curl / health checks with no origin
+    if (!origin) {
+      return callback(null, true);
     }
 
-    res.setHeader(
-      "Access-Control-Allow-Methods",
-      "GET,POST,PUT,DELETE,OPTIONS"
-    );
-    res.setHeader(
-      "Access-Control-Allow-Headers",
-      "Content-Type, Authorization"
-    );
-    return res.sendStatus(200);
-  }
+    if (allowedOrigins.has(origin)) {
+      return callback(null, true);
+    }
 
-  next();
-});
+    console.warn("❌ Blocked by CORS:", origin);
+    return callback(new Error(`Not allowed by CORS: ${origin}`));
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  optionsSuccessStatus: 200,
+};
+
+// Apply CORS globally before routes
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 
 // ================= MIDDLEWARE =================
 // Paddle webhook must receive raw body
@@ -73,13 +78,6 @@ app.use("/api/webhooks/paddle", express.raw({ type: "*/*" }));
 
 // JSON for all other routes
 app.use(express.json());
-
-// ================= JWT =================
-const JWT_SECRET = (process.env.JWT_SECRET || "").trim();
-if (!JWT_SECRET) {
-  console.error("❌ JWT_SECRET missing");
-  process.exit(1);
-}
 
 // ================= ROUTE IMPORTS =================
 const subscriptionStatus = require("./routes/subscriptionStatus");
@@ -141,8 +139,8 @@ app.post("/api/register", async (req, res) => {
       [
         normalizedEmail,
         hashed,
-        "free", // account exists, but no paid access yet
-        false, // access becomes active after successful payment webhook
+        "free",
+        false,
         "email",
       ]
     );
