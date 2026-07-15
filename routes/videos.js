@@ -5,12 +5,13 @@ const db = require("../db");
 // ======================================================
 // GET /api/videos
 //
-// Supports:
+// Examples:
 //
 // /api/videos
+//
 // /api/videos?category=highlight
-// /api/videos?category=hit
-// /api/videos?category=analysis
+//
+// /api/videos?category=hit,moment,try,tackle
 //
 // ======================================================
 
@@ -18,7 +19,7 @@ router.get("/", async (req, res) => {
   try {
     const { category } = req.query;
 
-    let query = `
+    let sql = `
       SELECT *
       FROM videos
     `;
@@ -26,31 +27,43 @@ router.get("/", async (req, res) => {
     const params = [];
 
     if (category) {
-      query += `
-        WHERE LOWER(category) = LOWER($1)
-      `;
-      params.push(category);
+      const categories = category
+        .split(",")
+        .map((c) => c.trim().toLowerCase())
+        .filter(Boolean);
+
+      if (categories.length > 0) {
+        const placeholders = categories
+          .map((_, i) => `$${i + 1}`)
+          .join(",");
+
+        sql += `
+          WHERE LOWER(category) IN (${placeholders})
+        `;
+
+        params.push(...categories);
+      }
     }
 
-    query += `
+    sql += `
       ORDER BY published_at DESC, id DESC
     `;
 
-    const result = await db.query(query, params);
+    const result = await db.query(sql, params);
 
     console.log(
-      `🎥 Returned ${result.rows.length} video(s)${
-        category ? ` for category "${category}"` : ""
+      `🎥 Returning ${result.rows.length} video(s)${
+        category ? ` for [${category}]` : ""
       }`
     );
 
     res.json(result.rows);
 
   } catch (err) {
-    console.error("❌ Error loading videos:", err);
+    console.error(err);
 
     res.status(500).json({
-      error: "Failed to load videos",
+      error: "Failed to fetch videos"
     });
   }
 });
