@@ -19,6 +19,11 @@ router.get("/", async (req, res) => {
       }ms`
     );
 
+    // ✅ SET HEADERS TO PREVENT CACHING
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    
     return res.json(news);
   } catch (error) {
     console.error("🔴 [NEWS ROUTE] Error:", error);
