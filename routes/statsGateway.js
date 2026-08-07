@@ -2,7 +2,6 @@ const express = require("express");
 
 const { getMatches } = require("../providers/highlightly/matches");
 const { getStandings } = require("../providers/highlightly/standings");
-const { getTeams } = require("../providers/highlightly/teams");
 
 const router = express.Router();
 
@@ -112,46 +111,6 @@ router.get("/standings", async (req, res) => {
     res.status(500).json({
       success: false,
       error: "Failed to fetch standings",
-    });
-  }
-});
-
-/*
-========================================
-TEAMS
-========================================
-*/
-
-router.get("/teams", async (req, res) => {
-  try {
-    const league = req.query.league
-      ? Number(req.query.league)
-      : undefined;
-
-    const season = req.query.season
-      ? Number(req.query.season)
-      : undefined;
-
-    console.log("👥 TEAMS REQUEST", {
-      league,
-      season,
-    });
-
-    const teams = await getTeams(
-      league,
-      season
-    );
-
-    res.json(teams);
-  } catch (error) {
-    console.error(
-      "TEAMS ERROR:",
-      error.message
-    );
-
-    res.status(500).json({
-      success: false,
-      error: "Failed to fetch teams",
     });
   }
 });
