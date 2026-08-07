@@ -98,6 +98,7 @@ const rugbyData = require("./routes/rugbyData");
 const newsRoutes = require("./routes/news");
 const loyaltyRoutes = require("./routes/loyalty");
 const videosRoutes = require("./routes/videos"); // ✅ ADDED
+const highlightlyTest = require("./routes/highlightlyTest");
 
 console.log("✅ All routes loaded");
 
@@ -252,6 +253,7 @@ app.use("/api/rugby", rugbyData);
 app.use("/api/news", newsRoutes);
 app.use("/api/loyalty", loyaltyRoutes);
 app.use("/api/videos", videosRoutes); // ✅ ADDED - REGISTERS THE VIDEOS ROUTE
+app.use("/api/highlightly", highlightlyTest);
 
 // ================= HEALTH =================
 app.get("/health", (_req, res) => {
