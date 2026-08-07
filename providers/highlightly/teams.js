@@ -19,17 +19,44 @@ async function getTeams(leagueId, season) {
       params,
     });
 
+    console.log(
+      "👥 RAW TEAMS RESPONSE:"
+    );
+    console.log(
+      JSON.stringify(response.data, null, 2)
+    );
+
     return convertTeams(response.data);
   } catch (error) {
+    console.error("========== TEAMS ERROR ==========");
+
     if (error.response) {
       console.error("STATUS:", error.response.status);
+
       console.error(
-        "BODY:",
-        JSON.stringify(error.response.data, null, 2)
+        "REQUEST PARAMS:",
+        {
+          leagueId,
+          season,
+        }
+      );
+
+      console.error(
+        "RESPONSE:"
+      );
+
+      console.error(
+        JSON.stringify(
+          error.response.data,
+          null,
+          2
+        )
       );
     } else {
       console.error(error.message);
     }
+
+    console.error("================================");
 
     throw error;
   }
