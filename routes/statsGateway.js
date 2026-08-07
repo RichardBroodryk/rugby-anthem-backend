@@ -14,13 +14,21 @@ MATCHES
 
 router.get("/matches", async (req, res) => {
   try {
-    const date =
-      req.query.date ||
-      new Date().toISOString().split("T")[0];
+    const filters = {};
 
-    const matches = await getMatches({
-      date,
-    });
+    if (req.query.date) {
+      filters.date = req.query.date;
+    }
+
+    if (req.query.league) {
+      filters.league = Number(req.query.league);
+    }
+
+    if (req.query.season) {
+      filters.season = Number(req.query.season);
+    }
+
+    const matches = await getMatches(filters);
 
     res.json(matches);
   } catch (error) {
@@ -41,13 +49,21 @@ FIXTURES (ALIAS)
 
 router.get("/fixtures", async (req, res) => {
   try {
-    const date =
-      req.query.date ||
-      new Date().toISOString().split("T")[0];
+    const filters = {};
 
-    const fixtures = await getMatches({
-      date,
-    });
+    if (req.query.date) {
+      filters.date = req.query.date;
+    }
+
+    if (req.query.league) {
+      filters.league = Number(req.query.league);
+    }
+
+    if (req.query.season) {
+      filters.season = Number(req.query.season);
+    }
+
+    const fixtures = await getMatches(filters);
 
     res.json(fixtures);
   } catch (error) {
@@ -68,16 +84,30 @@ STANDINGS
 
 router.get("/standings", async (req, res) => {
   try {
-    const { league, season } = req.query;
+    const league = req.query.league
+      ? Number(req.query.league)
+      : undefined;
+
+    const season = req.query.season
+      ? Number(req.query.season)
+      : undefined;
+
+    console.log("🏆 STANDINGS REQUEST", {
+      league,
+      season,
+    });
 
     const standings = await getStandings(
       league,
-      season ? Number(season) : undefined
+      season
     );
 
     res.json(standings);
   } catch (error) {
-    console.error("STANDINGS ERROR:", error.message);
+    console.error(
+      "STANDINGS ERROR:",
+      error.message
+    );
 
     res.status(500).json({
       success: false,
@@ -94,16 +124,30 @@ TEAMS
 
 router.get("/teams", async (req, res) => {
   try {
-    const { league, season } = req.query;
+    const league = req.query.league
+      ? Number(req.query.league)
+      : undefined;
+
+    const season = req.query.season
+      ? Number(req.query.season)
+      : undefined;
+
+    console.log("👥 TEAMS REQUEST", {
+      league,
+      season,
+    });
 
     const teams = await getTeams(
       league,
-      season ? Number(season) : undefined
+      season
     );
 
     res.json(teams);
   } catch (error) {
-    console.error("TEAMS ERROR:", error.message);
+    console.error(
+      "TEAMS ERROR:",
+      error.message
+    );
 
     res.status(500).json({
       success: false,
