@@ -62,19 +62,22 @@ function resolveState(description = "") {
 }
 
 function buildMatchKey(match) {
-  const home = (match.homeTeam?.name || "")
-    .toLowerCase()
-    .trim();
+  const normalize = (name) =>
+    String(name || "")
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s-]/g, "")
+      .replace(/\s+/g, "-");
 
-  const away = (match.awayTeam?.name || "")
-    .toLowerCase()
-    .trim();
+  const home = normalize(
+    match.homeTeam?.name
+  );
 
-  const date = match.date
-    ? match.date.split("T")[0]
-    : "";
+  const away = normalize(
+    match.awayTeam?.name
+  );
 
-  return `${home}_${away}_${date}`;
+  return `${home}-vs-${away}`;
 }
 
 function convertMatch(match = {}) {
@@ -103,9 +106,11 @@ leagueLogo: match.league?.logo || "",
 
     pool: undefined,
 
-    date: match.date
-      ? match.date.split("T")[0]
-      : "",
+   date: match.date
+  ? match.date.split("T")[0]
+  : "",
+
+startTime: match.date || "",
 
     venue: match.venue?.name || "TBC",
 

@@ -4,30 +4,49 @@ const { convertMatches } = require("./converter");
 /*
 ==================================================
 RAZ — HIGHLIGHTLY MATCH PROVIDER
+AUTHORITATIVE LIVE MATCH SOURCE
 ==================================================
 
-AUTHORITATIVE LIVE MATCH SOURCE
-
-The Highlightly /matches endpoint accepts a single
+Highlightly's /matches endpoint accepts a single
 date parameter.
 
-RAZ therefore retrieves a rolling window of dates so
-that:
+RAZ therefore retrieves a SMALL controlled window.
 
-- finished matches remain available after match day
-- today's matches remain live
-- upcoming matches are available
-- Match Page can resolve yesterday's matches
-- Results can display newly completed matches
-- Home can automatically move to the next fixture
+IMPORTANT:
 
-The provider returns ONE combined match array.
+We do NOT request a large rolling window.
+
+The provider uses a maximum of four Highlightly
+requests for the default window:
+
+- yesterday
+- today
+- tomorrow
+- day after tomorrow
+
+This gives RAZ:
+
+- yesterday's completed matches
+- today's live matches
+- today's remaining fixtures
+- near-future fixture continuity
+
+Multiple RAZ pages call getMatches().
+
+The cache prevents repeated Highlightly requests
+for the SAME request window.
+
+The cache is deliberately keyed by request options
+so that data for one date can NEVER be returned for
+another date.
 ==================================================
 */
 
-/* ==================================================
-   DATE HELPERS
-   ================================================== */
+/*
+==================================================
+DATE HELPERS
+==================================================
+*/
 
 function formatDate(date) {
   return date.toISOString().split("T")[0];
@@ -35,15 +54,100 @@ function formatDate(date) {
 
 function addDays(date, days) {
   const result = new Date(date);
-  result.setUTCDate(result.getUTCDate() + days);
+
+  result.setUTCDate(
+    result.getUTCDate() + days
+  );
+
   return result;
 }
 
-/* ==================================================
-   SINGLE-DAY FETCH
-   ================================================== */
+/*
+==================================================
+CACHE
+==================================================
 
-async function fetchMatchesForDate(date, filters = {}) {
+Each request window gets its own cache entry.
+
+Example:
+
+2026-08-21 → separate cache
+2026-08-22 → separate cache
+2026-08-23 → separate cache
+
+This is essential because /fixtures?date=YYYY-MM-DD
+is used by the frontend for specific match dates.
+==================================================
+*/
+
+const cache = new Map();
+
+const CACHE_TTL = 60 * 1000;
+
+/*
+==================================================
+ACTIVE REQUEST LOCKS
+==================================================
+
+If two pages request the SAME window at exactly
+the same time, they share the same Highlightly
+request.
+
+Different dates are allowed to have their own
+request.
+
+Example:
+
+Page A → 2026-08-22
+Page B → 2026-08-22
+
+Both share one request.
+
+But:
+
+Page A → 2026-08-22
+Page B → 2026-08-23
+
+These remain separate.
+==================================================
+*/
+
+const activeRequests = new Map();
+
+/*
+==================================================
+CACHE KEY
+==================================================
+*/
+
+function createCacheKey(options = {}) {
+  const normalized = {
+    fromDate: options.fromDate || null,
+    toDate: options.toDate || null,
+    daysBack:
+      options.daysBack !== undefined
+        ? Number(options.daysBack)
+        : null,
+    daysForward:
+      options.daysForward !== undefined
+        ? Number(options.daysForward)
+        : null,
+    ...options,
+  };
+
+  return JSON.stringify(normalized);
+}
+
+/*
+==================================================
+SINGLE-DAY FETCH
+==================================================
+*/
+
+async function fetchMatchesForDate(
+  date,
+  filters = {}
+) {
   const params = {
     timezone: "Africa/Johannesburg",
     limit: 100,
@@ -51,153 +155,182 @@ async function fetchMatchesForDate(date, filters = {}) {
     ...filters,
   };
 
-  console.log("🏉 MATCH SEARCH:", params);
+  console.log(
+    "🏉 MATCH SEARCH:",
+    params
+  );
 
-  const response = await client.get("/matches", {
-    params,
-  });
+  const response = await client.get(
+    "/matches",
+    {
+      params,
+    }
+  );
 
-  const converted = convertMatches(response.data);
+  const converted =
+    convertMatches(response.data);
 
   console.log(
-    `🏉 MATCHES ${date}: ${converted.length}`
+    `🏉 HIGHLIGHTLY FIXTURES ${date}: ${converted.length}`
   );
 
   return converted;
 }
 
-/* ==================================================
-   MAIN
-   ================================================== */
+/*
+==================================================
+WINDOW FETCH
+==================================================
+*/
 
-async function getMatches(options = {}) {
+async function fetchMatchesWindow(
+  options = {}
+) {
   /*
   --------------------------------------------------
-  ROLLING WINDOW
+  DEFAULT WINDOW
 
-  Previous:
-    7 days
+  Yesterday
+  Today
+  Tomorrow
+  Day after tomorrow
 
-  Current:
-    today
-
-  Future:
-    14 days
-
-  This gives RAZ enough information for:
-
-  - recent results
-  - current matches
-  - upcoming fixtures
-  - featured match rotation
-  - direct Match Page resolution
+  Four requests maximum.
   --------------------------------------------------
   */
 
   const {
     fromDate,
     toDate,
-    daysBack = 7,
-    daysForward = 14,
+    daysBack = 1,
+    daysForward = 2,
     ...filters
-  } = options || {};
+  } = options;
 
-  try {
-    const today = new Date();
+  const today = new Date();
 
-    const startDate = fromDate
-      ? new Date(`${fromDate}T00:00:00.000Z`)
-      : addDays(today, -daysBack);
+  const startDate = fromDate
+    ? new Date(
+        `${fromDate}T00:00:00.000Z`
+      )
+    : addDays(
+        today,
+        Number(daysBack)
+          ? -Number(daysBack)
+          : -1
+      );
 
-    const endDate = toDate
-      ? new Date(`${toDate}T00:00:00.000Z`)
-      : addDays(today, daysForward);
+  const endDate = toDate
+    ? new Date(
+        `${toDate}T00:00:00.000Z`
+      )
+    : addDays(
+        today,
+        Number(daysForward)
+          ? Number(daysForward)
+          : 2
+      );
 
-    const dates = [];
+  const dates = [];
 
-    let cursor = startDate;
+  let cursor = startDate;
 
-    while (cursor <= endDate) {
-      dates.push(formatDate(cursor));
-      cursor = addDays(cursor, 1);
-    }
-
-    console.log(
-      `🏉 HIGHLIGHTLY MATCH WINDOW: ${dates[0]} → ${
-        dates[dates.length - 1]
-      }`
+  while (cursor <= endDate) {
+    dates.push(
+      formatDate(cursor)
     );
 
-    /*
-    --------------------------------------------------
-    FETCH ALL DAYS
-    --------------------------------------------------
+    cursor = addDays(
+      cursor,
+      1
+    );
+  }
 
-    Sequential requests deliberately used here.
+  console.log(
+    `🏉 HIGHLIGHTLY MATCH WINDOW: ${dates[0]} → ${
+      dates[dates.length - 1]
+    }`
+  );
 
-    This avoids firing a large burst of requests at
-    Highlightly and makes the backend easier to
-    monitor.
-    --------------------------------------------------
-    */
+  /*
+  --------------------------------------------------
+  FETCH DAYS
+  --------------------------------------------------
+  */
 
-    const allMatches = [];
+  const allMatches = [];
 
-    for (const date of dates) {
-      try {
-        const matches = await fetchMatchesForDate(
+  for (const date of dates) {
+    try {
+      const matches =
+        await fetchMatchesForDate(
           date,
           filters
         );
 
-        allMatches.push(...matches);
-      } catch (error) {
-        /*
-        ------------------------------------------------
-        ONE DAY FAILING MUST NOT KILL THE WHOLE WINDOW
-        ------------------------------------------------
-        */
+      allMatches.push(
+        ...matches
+      );
+    } catch (error) {
+      /*
+      ----------------------------------------------
+      ONE DAY FAILING MUST NOT DESTROY THE WINDOW
+      ----------------------------------------------
+      */
 
-        if (error.response) {
-          console.error(
-            `❌ HIGHLIGHTLY ${date} FAILED:`,
-            error.response.status
-          );
+      if (error.response) {
+        console.error(
+          `❌ HIGHLIGHTLY ${date} FAILED:`,
+          error.response.status
+        );
 
-          console.error(
-            JSON.stringify(
-              error.response.data,
-              null,
-              2
-            )
-          );
-        } else {
-          console.error(
-            `❌ HIGHLIGHTLY ${date} FAILED:`,
-            error.message
-          );
-        }
+        console.error(
+          JSON.stringify(
+            error.response.data,
+            null,
+            2
+          )
+        );
+      } else {
+        console.error(
+          `❌ HIGHLIGHTLY ${date} FAILED:`,
+          error.message
+        );
       }
+
+      /*
+      Continue to the next date.
+      */
     }
+  }
 
-    /*
-    --------------------------------------------------
-    DEDUPLICATE
-    --------------------------------------------------
-    */
+  /*
+  --------------------------------------------------
+  DEDUPLICATE
+  --------------------------------------------------
+  */
 
-    const uniqueMatches = new Map();
+  const uniqueMatches =
+    new Map();
 
-    allMatches.forEach((match) => {
-      if (!match || !match.id) return;
+  allMatches.forEach(
+    (match) => {
+      if (
+        !match ||
+        !match.id
+      ) {
+        return;
+      }
 
       uniqueMatches.set(
         String(match.id),
         match
       );
-    });
+    }
+  );
 
-    const result = Array.from(
+  const result =
+    Array.from(
       uniqueMatches.values()
     ).sort(
       (a, b) =>
@@ -205,36 +338,127 @@ async function getMatches(options = {}) {
         new Date(b.date).getTime()
     );
 
+  console.log(
+    `🏉 HIGHLIGHTLY WINDOW TOTAL: ${result.length}`
+  );
+
+  return result;
+}
+
+/*
+==================================================
+MAIN
+==================================================
+*/
+
+async function getMatches(
+  options = {}
+) {
+  const cacheKey =
+    createCacheKey(options);
+
+  const now = Date.now();
+
+  /*
+  --------------------------------------------------
+  CACHE CHECK
+  --------------------------------------------------
+  */
+
+  const cached =
+    cache.get(cacheKey);
+
+  if (
+    cached &&
+    now - cached.timestamp < CACHE_TTL
+  ) {
     console.log(
-      `🏉 HIGHLIGHTLY WINDOW TOTAL: ${result.length}`
+      "⚡ HIGHLIGHTLY CACHE HIT:",
+      cached.matches.length,
+      cacheKey
+    );
+
+    return cached.matches;
+  }
+
+  /*
+  --------------------------------------------------
+  ACTIVE REQUEST CHECK
+  --------------------------------------------------
+  */
+
+  if (
+    activeRequests.has(cacheKey)
+  ) {
+    console.log(
+      "⏳ HIGHLIGHTLY REQUEST ALREADY RUNNING — SHARING IT:",
+      cacheKey
+    );
+
+    return activeRequests.get(
+      cacheKey
+    );
+  }
+
+  /*
+  --------------------------------------------------
+  START NEW REQUEST
+  --------------------------------------------------
+  */
+
+  const request =
+    fetchMatchesWindow(options);
+
+  activeRequests.set(
+    cacheKey,
+    request
+  );
+
+  try {
+    const result =
+      await request;
+
+    cache.set(
+      cacheKey,
+      {
+        matches: result,
+        timestamp: Date.now(),
+      }
     );
 
     return result;
-  } catch (error) {
-    if (error.response) {
-      console.error(
-        "❌ HIGHLIGHTLY MATCH ERROR:",
-        error.response.status
-      );
-
-      console.error(
-        JSON.stringify(
-          error.response.data,
-          null,
-          2
-        )
-      );
-    } else {
-      console.error(
-        "❌ HIGHLIGHTLY MATCH ERROR:",
-        error.message
-      );
-    }
-
-    throw error;
+  } finally {
+    activeRequests.delete(
+      cacheKey
+    );
   }
 }
 
+/*
+==================================================
+CLEAR CACHE
+==================================================
+
+Useful when we need to force an immediate refresh
+after an important event.
+==================================================
+*/
+
+function clearMatchesCache() {
+  cache.clear();
+
+  console.log(
+    "🧹 HIGHLIGHTLY MATCH CACHE CLEARED"
+  );
+}
+
+/*
+==================================================
+EXPORTS
+==================================================
+*/
+
 module.exports = {
   getMatches,
+  clearMatchesCache,
 };
