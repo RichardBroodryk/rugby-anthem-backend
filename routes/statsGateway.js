@@ -41,6 +41,12 @@ The provider retrieves:
 
 The /fixtures endpoint also supports the legacy
 frontend ?date=YYYY-MM-DD request.
+
+Both endpoints also support an optional:
+
+?league=npc
+
+parameter for targeted competition requests.
 ==================================================
 */
 
@@ -58,6 +64,7 @@ router.get("/matches", async (req, res) => {
       toDate,
       daysBack,
       daysForward,
+      league,
     } = req.query;
 
     const options = {};
@@ -105,11 +112,33 @@ router.get("/matches", async (req, res) => {
       }
     }
 
+    /*
+    --------------------------------------------------
+    COMPETITION FILTER
+
+    Example:
+
+    ?league=npc
+
+    Keep the value as supplied by the frontend.
+
+    The Highlightly provider will handle the
+    competition-specific resolution.
+    --------------------------------------------------
+    */
+
+    if (league) {
+      options.league = String(league);
+    }
+
     console.log(
       "📊 MATCHES REQUEST:",
       {
         requestedDate: date
           ? String(date)
+          : undefined,
+        league: league
+          ? String(league)
           : undefined,
         options,
       }
@@ -175,7 +204,13 @@ The frontend historically calls:
 
 /fixtures?date=YYYY-MM-DD
 
-That date MUST be passed through to the provider.
+The date MUST be passed through to the provider.
+
+The endpoint also supports:
+
+/fixtures?league=npc
+
+for targeted competition requests.
 ==================================================
 */
 
@@ -187,6 +222,7 @@ router.get("/fixtures", async (req, res) => {
       toDate,
       daysBack,
       daysForward,
+      league,
     } = req.query;
 
     const options = {};
@@ -243,11 +279,31 @@ router.get("/fixtures", async (req, res) => {
       }
     }
 
+    /*
+    --------------------------------------------------
+    COMPETITION FILTER
+
+    Example:
+
+    ?league=npc
+
+    Pass the requested competition through to the
+    Highlightly match provider.
+    --------------------------------------------------
+    */
+
+    if (league) {
+      options.league = String(league);
+    }
+
     console.log(
       "📅 FIXTURES REQUEST:",
       {
         requestedDate: date
           ? String(date)
+          : undefined,
+        league: league
+          ? String(league)
           : undefined,
         options,
       }
