@@ -1,5 +1,11 @@
 const { resolveCompetitionId } = require("./competitionResolver");
 
+/*
+==================================================
+COUNTRY NORMALISATION
+==================================================
+*/
+
 function normalizeCountry(name) {
   if (!name) return "unknown";
 
@@ -10,12 +16,20 @@ function normalizeCountry(name) {
     .replace(/\s+/g, "-");
 }
 
+/*
+==================================================
+SCORE PARSER
+==================================================
+*/
+
 function parseScore(score) {
   if (!score || typeof score !== "string") {
     return undefined;
   }
 
-  const parts = score.split("-").map((part) => Number(part.trim()));
+  const parts = score
+    .split("-")
+    .map((part) => Number(part.trim()));
 
   if (
     parts.length !== 2 ||
@@ -31,8 +45,14 @@ function parseScore(score) {
   };
 }
 
+/*
+==================================================
+MATCH STATE
+==================================================
+*/
+
 function resolveState(description = "") {
-  const state = description.toLowerCase();
+  const state = String(description).toLowerCase();
 
   if (
     state.includes("finished") ||
@@ -61,6 +81,12 @@ function resolveState(description = "") {
   return "upcoming";
 }
 
+/*
+==================================================
+MATCH KEY
+==================================================
+*/
+
 function buildMatchKey(match) {
   const normalize = (name) =>
     String(name || "")
@@ -80,55 +106,98 @@ function buildMatchKey(match) {
   return `${home}-vs-${away}`;
 }
 
+/*
+==================================================
+MATCH CONVERTER
+==================================================
+*/
+
 function convertMatch(match = {}) {
   return {
     id: match.id ?? 0,
 
+    highlightlyId: match.id ?? null,
+
     matchKey: buildMatchKey(match),
 
-    competitionId: resolveCompetitionId(match.league),
+    competitionId:
+      resolveCompetitionId(match.league),
 
-tournament: match.league?.name || "",
+    tournament:
+      match.league?.name || "",
 
-leagueId: match.league?.id ?? null,
+    leagueId:
+      match.league?.id ?? null,
 
-season: match.league?.season ?? null,
+    season:
+      match.league?.season ?? null,
 
-leagueLogo: match.league?.logo || "",
+    leagueLogo:
+      match.league?.logo || "",
 
-    tournamentInstanceId: undefined,
+    tournamentInstanceId:
+      undefined,
 
-    stage: undefined,
+    stage:
+      undefined,
 
-    gender: "men",
+    gender:
+      "men",
 
-    round: match.week || "",
+    round:
+      match.week || "",
 
-    pool: undefined,
+    pool:
+      undefined,
 
-   date: match.date
-  ? match.date.split("T")[0]
-  : "",
+    date:
+      match.date
+        ? match.date.split("T")[0]
+        : "",
 
-startTime: match.date || "",
+    startTime:
+      match.date || "",
 
-    venue: match.venue?.name || "TBC",
+    venue:
+      match.venue?.name || "TBC",
 
     home: {
-      name: match.homeTeam?.name || "",
-      country: normalizeCountry(match.homeTeam?.name),
+      name:
+        match.homeTeam?.name || "",
+
+      country:
+        normalizeCountry(
+          match.homeTeam?.name
+        ),
     },
 
     away: {
-      name: match.awayTeam?.name || "",
-      country: normalizeCountry(match.awayTeam?.name),
+      name:
+        match.awayTeam?.name || "",
+
+      country:
+        normalizeCountry(
+          match.awayTeam?.name
+        ),
     },
 
-    score: parseScore(match.state?.score),
+    score:
+      parseScore(
+        match.state?.score
+      ),
 
-    state: resolveState(match.state?.description),
+    state:
+      resolveState(
+        match.state?.description
+      ),
   };
 }
+
+/*
+==================================================
+GENERIC ARRAY EXTRACTION
+==================================================
+*/
 
 function extractArray(response) {
   if (Array.isArray(response)) {
@@ -139,61 +208,282 @@ function extractArray(response) {
     return response.data;
   }
 
-  if (Array.isArray(response?.data?.data)) {
+  if (
+    Array.isArray(
+      response?.data?.data
+    )
+  ) {
     return response.data.data;
   }
 
   return [];
 }
 
+/*
+==================================================
+MATCH CONVERSION
+==================================================
+*/
+
 function convertMatches(response) {
-  return extractArray(response).map(convertMatch);
+  return extractArray(response)
+    .map(convertMatch);
 }
+
+/*
+==================================================
+STANDING CONVERTER
+==================================================
+
+Highlightly rugby standings use:
+
+groups[]
+  standings[]
+    team
+    wins
+    loses
+    draws
+    gamesPlayed
+    scoredPoints
+    receivedPoints
+    points
+    position
+
+RAZ normalises these into the frontend
+StandingRow structure.
+==================================================
+*/
 
 function convertStanding(row = {}) {
   return {
-    id: row.team?.id ?? row.id ?? null,
-    name: row.team?.name ?? row.name ?? "",
-    logo: row.team?.logo ?? row.logo ?? "",
-    played: row.played ?? 0,
-    won: row.won ?? 0,
-    drawn: row.drawn ?? 0,
-    lost: row.lost ?? 0,
-    pointsFor: row.pointsFor ?? 0,
-    pointsAgainst: row.pointsAgainst ?? 0,
-    points: row.points ?? 0,
-    position: row.position ?? 0,
-    raw: row,
+    id:
+      row.team?.id ??
+      row.id ??
+      null,
+
+    name:
+      row.team?.name ??
+      row.name ??
+      "",
+
+    logo:
+      row.team?.logo ??
+      row.logo ??
+      "",
+
+    played:
+      row.gamesPlayed ??
+      row.played ??
+      0,
+
+    won:
+      row.wins ??
+      row.won ??
+      0,
+
+    drawn:
+      row.draws ??
+      row.drawn ??
+      0,
+
+    lost:
+      row.loses ??
+      row.lost ??
+      0,
+
+    pointsFor:
+      row.scoredPoints ??
+      row.pointsFor ??
+      0,
+
+    pointsAgainst:
+      row.receivedPoints ??
+      row.pointsAgainst ??
+      0,
+
+    points:
+      row.points ??
+      0,
+
+    position:
+      row.position ??
+      0,
+
+    raw:
+      row,
   };
 }
 
-function convertStandings(response) {
-  return extractArray(response).map(convertStanding);
+/*
+==================================================
+STANDINGS ROW EXTRACTION
+==================================================
+
+Highlightly returns grouped standings:
+
+{
+  groups: [
+    {
+      name: "...",
+      standings: [...]
+    }
+  ]
 }
+
+Flatten all groups into one RAZ array.
+
+This also allows competitions with multiple
+groups/conferences to work without changing the
+frontend standings service.
+==================================================
+*/
+
+function extractStandingsRows(response) {
+  /*
+  --------------------------------------------------
+  DIRECT ARRAY
+  --------------------------------------------------
+  */
+
+  if (Array.isArray(response)) {
+    return response;
+  }
+
+  /*
+  --------------------------------------------------
+  GROUPED HIGHLIGHTLY RESPONSE
+  --------------------------------------------------
+  */
+
+  if (Array.isArray(response?.groups)) {
+    return response.groups.flatMap(
+      (group) =>
+        Array.isArray(
+          group?.standings
+        )
+          ? group.standings
+          : []
+    );
+  }
+
+  /*
+  --------------------------------------------------
+  DATA WRAPPERS
+  --------------------------------------------------
+  */
+
+  if (
+    Array.isArray(
+      response?.data?.groups
+    )
+  ) {
+    return response.data.groups.flatMap(
+      (group) =>
+        Array.isArray(
+          group?.standings
+        )
+          ? group.standings
+          : []
+    );
+  }
+
+  if (
+    Array.isArray(
+      response?.data
+    )
+  ) {
+    return response.data;
+  }
+
+  if (
+    Array.isArray(
+      response?.data?.data
+    )
+  ) {
+    return response.data.data;
+  }
+
+  return [];
+}
+
+/*
+==================================================
+STANDINGS CONVERSION
+==================================================
+*/
+
+function convertStandings(response) {
+  const rows =
+    extractStandingsRows(
+      response
+    );
+
+  console.log(
+    `🏆 CONVERTING STANDINGS: ${rows.length} rows`
+  );
+
+  return rows.map(
+    convertStanding
+  );
+}
+
+/*
+==================================================
+TEAM CONVERTER
+==================================================
+*/
 
 function convertTeam(team = {}) {
   return {
-    id: team.id ?? null,
-    name: team.name ?? "",
-    logo: team.logo ?? "",
+    id:
+      team.id ?? null,
+
+    name:
+      team.name ?? "",
+
+    logo:
+      team.logo ?? "",
+
     country: {
-      code: team.country?.code ?? "",
-      name: team.country?.name ?? "",
-      logo: team.country?.logo ?? "",
+      code:
+        team.country?.code ?? "",
+
+      name:
+        team.country?.name ?? "",
+
+      logo:
+        team.country?.logo ?? "",
     },
-    raw: team,
+
+    raw:
+      team,
   };
 }
 
+/*
+==================================================
+TEAM CONVERSION
+==================================================
+*/
+
 function convertTeams(response) {
-  return extractArray(response).map(convertTeam);
+  return extractArray(response)
+    .map(convertTeam);
 }
+
+/*
+==================================================
+EXPORTS
+==================================================
+*/
 
 module.exports = {
   convertMatch,
   convertMatches,
+
   convertStanding,
   convertStandings,
+
   convertTeam,
   convertTeams,
 };
