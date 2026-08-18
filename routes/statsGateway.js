@@ -1,5 +1,7 @@
 const express = require("express");
 
+const client = require("../providers/highlightly/client");
+
 const {
   getMatches,
 } = require("../providers/highlightly/matches");
@@ -11,6 +13,10 @@ const {
 const {
   getTeams,
 } = require("../providers/highlightly/teams");
+
+const {
+  getMatchHighlights,
+} = require("../providers/highlightly/highlights");
 
 const router = express.Router();
 
@@ -69,18 +75,6 @@ router.get("/matches", async (req, res) => {
 
     const options = {};
 
-    /*
-    --------------------------------------------------
-    DATE COMPATIBILITY
-
-    If the frontend supplies:
-
-    ?date=2026-08-22
-
-    treat it as a single-day request.
-    --------------------------------------------------
-    */
-
     if (date) {
       const requestedDate = String(date);
 
@@ -111,21 +105,6 @@ router.get("/matches", async (req, res) => {
         options.daysForward = parsed;
       }
     }
-
-    /*
-    --------------------------------------------------
-    COMPETITION FILTER
-
-    Example:
-
-    ?league=npc
-
-    Keep the value as supplied by the frontend.
-
-    The Highlightly provider will handle the
-    competition-specific resolution.
-    --------------------------------------------------
-    */
 
     if (league) {
       options.league = String(league);
@@ -227,27 +206,6 @@ router.get("/fixtures", async (req, res) => {
 
     const options = {};
 
-    /*
-    --------------------------------------------------
-    DATE COMPATIBILITY
-
-    Convert:
-
-    ?date=2026-08-22
-
-    into:
-
-    {
-      fromDate: "2026-08-22",
-      toDate: "2026-08-22"
-    }
-
-    This forces Highlightly to retrieve that
-    specific match day rather than the default
-    rolling window.
-    --------------------------------------------------
-    */
-
     if (date) {
       const requestedDate = String(date);
 
@@ -278,19 +236,6 @@ router.get("/fixtures", async (req, res) => {
         options.daysForward = parsed;
       }
     }
-
-    /*
-    --------------------------------------------------
-    COMPETITION FILTER
-
-    Example:
-
-    ?league=npc
-
-    Pass the requested competition through to the
-    Highlightly match provider.
-    --------------------------------------------------
-    */
 
     if (league) {
       options.league = String(league);
@@ -352,6 +297,160 @@ router.get("/fixtures", async (req, res) => {
     });
   }
 });
+
+/*
+==================================================
+MATCH DETAILS — TEMPORARY INSPECTION ENDPOINT
+
+Purpose:
+
+Retrieve the RAW Highlightly response for one
+specific match.
+
+This is deliberately NOT converted or altered.
+
+We need to inspect exactly what Highlightly
+provides before building the RAZ Match Intelligence
+layer.
+
+Example:
+
+/match-details/47312129
+
+Bulls vs New Zealand
+Highlightly ID: 47312129
+
+DO NOT build frontend statistics from this endpoint
+yet.
+
+This endpoint exists only to inspect the provider's
+available detailed match data.
+==================================================
+*/
+
+router.get(
+  "/match-details/:matchId",
+  async (req, res) => {
+    try {
+      const {
+        matchId,
+      } = req.params;
+
+      console.log(
+        "🔎 HIGHLIGHTLY MATCH DETAILS REQUEST:",
+        matchId
+      );
+
+      const response =
+        await client.get(
+          `/matches/${matchId}`
+        );
+
+      console.log(
+        "🔎 HIGHLIGHTLY MATCH DETAILS RESPONSE:",
+        JSON.stringify(
+          response.data,
+          null,
+          2
+        )
+      );
+
+      res.json(
+        response.data
+      );
+    } catch (error) {
+      console.error(
+        "========== MATCH DETAILS ERROR =========="
+      );
+
+      console.error(
+        error.message
+      );
+
+      if (error.response) {
+        console.error(
+          "STATUS:",
+          error.response.status
+        );
+
+        console.error(
+          "RESPONSE:",
+          JSON.stringify(
+            error.response.data,
+            null,
+            2
+          )
+        );
+      }
+
+      console.error(
+        "========================================="
+      );
+
+      res.status(500).json({
+        success: false,
+        error:
+          "Failed to fetch match details",
+      });
+    }
+  }
+);
+
+/*
+==================================================
+MATCH HIGHLIGHTS
+
+RAZ exposes Highlightly verified match highlights
+through the stable stats gateway.
+
+This returns video/highlight content only.
+
+It is NOT a structured player-event feed.
+==================================================
+*/
+
+router.get(
+  "/highlights/:matchId",
+  async (req, res) => {
+    try {
+      const {
+        matchId,
+      } = req.params;
+
+      console.log(
+        "🎥 MATCH HIGHLIGHTS REQUEST:",
+        matchId
+      );
+
+      const highlights =
+        await getMatchHighlights(
+          matchId
+        );
+
+      console.log(
+        `🎥 MATCH HIGHLIGHTS RESPONSE: ${highlights.length}`
+      );
+
+      res.json(
+        highlights
+      );
+    } catch (error) {
+      console.error(
+        "========== MATCH HIGHLIGHTS ERROR =========="
+      );
+
+      console.error(
+        error.message
+      );
+
+      res.status(500).json({
+        success: false,
+        error:
+          "Failed to fetch match highlights",
+      });
+    }
+  }
+);
 
 /*
 ==================================================
