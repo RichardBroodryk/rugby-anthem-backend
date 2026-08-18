@@ -97,7 +97,8 @@ const statsGateway = require("./routes/statsGateway");
 const rugbyData = require("./routes/rugbyData");
 const newsRoutes = require("./routes/news");
 const loyaltyRoutes = require("./routes/loyalty");
-const videosRoutes = require("./routes/videos"); // ✅ ADDED
+const videosRoutes = require("./routes/videos");
+const matchContentRoutes = require("./routes/matchContent");
 const highlightlyTest = require("./routes/highlightlyTest");
 
 console.log("✅ All routes loaded");
@@ -252,7 +253,8 @@ app.use("/api/stats", statsGateway);
 app.use("/api/rugby", rugbyData);
 app.use("/api/news", newsRoutes);
 app.use("/api/loyalty", loyaltyRoutes);
-app.use("/api/videos", videosRoutes); // ✅ ADDED - REGISTERS THE VIDEOS ROUTE
+app.use("/api/videos", videosRoutes);
+app.use("/api/match-content", matchContentRoutes);
 app.use("/api/highlightly", highlightlyTest);
 
 // ================= HEALTH =================

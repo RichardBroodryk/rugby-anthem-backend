@@ -14,10 +14,6 @@ const {
   getTeams,
 } = require("../providers/highlightly/teams");
 
-const {
-  getMatchHighlights,
-} = require("../providers/highlightly/highlights");
-
 const router = express.Router();
 
 /*
@@ -395,63 +391,6 @@ router.get(
     }
   }
 );
-
-/*
-==================================================
-MATCH HIGHLIGHTS
-
-RAZ exposes Highlightly verified match highlights
-through the stable stats gateway.
-
-This returns video/highlight content only.
-
-It is NOT a structured player-event feed.
-==================================================
-*/
-
-router.get(
-  "/highlights/:matchId",
-  async (req, res) => {
-    try {
-      const {
-        matchId,
-      } = req.params;
-
-      console.log(
-        "🎥 MATCH HIGHLIGHTS REQUEST:",
-        matchId
-      );
-
-      const highlights =
-        await getMatchHighlights(
-          matchId
-        );
-
-      console.log(
-        `🎥 MATCH HIGHLIGHTS RESPONSE: ${highlights.length}`
-      );
-
-      res.json(
-        highlights
-      );
-    } catch (error) {
-      console.error(
-        "========== MATCH HIGHLIGHTS ERROR =========="
-      );
-
-      console.error(
-        error.message
-      );
-
-      res.status(500).json({
-        success: false,
-        error:
-          "Failed to fetch match highlights",
-      });
-    }
-  }
-);
-
 /*
 ==================================================
 STANDINGS
