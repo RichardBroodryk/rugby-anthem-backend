@@ -83,6 +83,8 @@ is used by the frontend for specific match dates.
 const cache = new Map();
 
 const CACHE_TTL = 60 * 1000;
+const NPC_HIGHLIGHTLY_LEAGUE_ID = 68864;
+const NPC_SEASON = 2026;
 
 /*
 ==================================================
@@ -113,6 +115,16 @@ These remain separate.
 */
 
 const activeRequests = new Map();
+
+/*
+==================================================
+RAZ → HIGHLIGHTLY LEAGUE IDS
+==================================================
+*/
+
+const HIGHLIGHTLY_LEAGUE_IDS = {
+  npc: 68864,
+};
 
 /*
 ==================================================
@@ -179,6 +191,61 @@ async function fetchMatchesForDate(
 
 /*
 ==================================================
+NPC SEASON FETCH
+==================================================
+
+Bunnings NPC is a season-based dataset.
+
+RAZ uses:
+
+npc
+    ↓
+Highlightly leagueId 68864
+    ↓
+season 2026
+
+This retrieves the complete NPC season instead
+of allowing older completed matches to disappear
+from the rolling date window.
+==================================================
+*/
+
+async function fetchNpcSeason() {
+  const params = {
+    timezone: "Africa/Johannesburg",
+    limit: 100,
+    leagueId:
+      NPC_HIGHLIGHTLY_LEAGUE_ID,
+    season: NPC_SEASON,
+  };
+
+  console.log(
+    "🏉 NPC SEASON SEARCH:",
+    params
+  );
+
+  const response =
+    await client.get(
+      "/matches",
+      {
+        params,
+      }
+    );
+
+  const converted =
+    convertMatches(
+      response.data
+    );
+
+  console.log(
+    `🏉 HIGHLIGHTLY NPC 2026 MATCHES: ${converted.length}`
+  );
+
+  return converted;
+}
+
+/*
+==================================================
 WINDOW FETCH
 ==================================================
 */
@@ -186,6 +253,25 @@ WINDOW FETCH
 async function fetchMatchesWindow(
   options = {}
 ) {
+
+    /*
+  --------------------------------------------------
+  NPC SEASON MODE
+  --------------------------------------------------
+
+  NPC does not use the normal rolling date window.
+
+  The complete 2026 season is requested directly
+  from Highlightly.
+  --------------------------------------------------
+  */
+
+  if (
+    String(options.league || "")
+      .toLowerCase() === "npc"
+  ) {
+    return fetchNpcSeason();
+  }
   /*
   --------------------------------------------------
   DEFAULT WINDOW
@@ -204,8 +290,23 @@ async function fetchMatchesWindow(
     toDate,
     daysBack = 1,
     daysForward = 2,
+    league,
     ...filters
   } = options;
+
+  if (league) {
+    const key = String(league)
+      .trim()
+      .toLowerCase();
+
+    const highlightlyLeagueId =
+      HIGHLIGHTLY_LEAGUE_IDS[key];
+
+    if (highlightlyLeagueId) {
+      filters.leagueId =
+        highlightlyLeagueId;
+    }
+  }
 
   const today = new Date();
 
